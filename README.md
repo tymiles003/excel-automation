@@ -26,3 +26,6 @@ A visual basics scripting to open all the excel files in a folder and save them 
 
 8#consolidation_macro.bas-
 A VBA script for fetching data from different excel files and consolidating into one file.
+
+9#consolidate_budget.bas-
+A VBA script for fetching required data from different excel files in a folder and putting them into a one file.
