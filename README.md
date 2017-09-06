@@ -9,8 +9,7 @@ A python script to split excel file with multiple sheets on the basis of a colum
 2#Consolidation with links.py-
 A python script to consolidate excel files with multiple sheets on the basis of a columns into different files using python libraries such as pandas, openpyxl, xlsxwriter etc.
 
-3#dashboard.bas-
-A VBA script to update array formulas in excel and prepare dashboard with form control elements.
+3#dashboard.bas-A faster & highly flexible VBA script for fetching the data from consolidated file and preparing dashboard.
 
 4#add_data_format.py-
 A python script to add a sheet with links in other files to prepare sheet in required data format.
@@ -30,5 +29,3 @@ A VBA script for fetching data from different excel files and consolidating into
 9#consolidate_budget.bas-
 A VBA script for fetching required data from different excel files in a folder and putting them into a one file.
 
-10#dashboard_fast.bas-
-A faster & highly flexible VBA script for fetching the data from consolidated file and preparing dashboard.
