@@ -29,3 +29,5 @@ A VBA script for fetching data from different excel files and consolidating into
 9#consolidate_budget.bas-
 A VBA script for fetching required data from different excel files in a folder and putting them into a one file.
 
+10#consolidation rev.bas-
+VBA script for taking data from different sheets in different files and consolidating together by appending the rows based on the yes/no condition in sheets.
