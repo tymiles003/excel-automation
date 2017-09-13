@@ -115,6 +115,7 @@ Set con_rev = ThisWorkbook.Sheets(mysheets(x))
 clr_row = con_rev.Cells(Rows.Count, 1).End(xlUp).Row
 clr_col = con_rev.UsedRange.Columns.Count
 lst_cell = Cells(clr_row, clr_col).Address()
+con_rev.Range("A5:XFD1048576").Interior.Color = RGB(255, 255, 255)
 If clr_row <> 4 Then
 con_rev.Range("a5:" & lst_cell).ClearContents
 End If
