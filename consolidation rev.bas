@@ -51,7 +51,7 @@ Do While Len(myFile) > 0
     'paste with links
     this_sht.Range(strt_range & ":" & end_range).Copy
     Windows("Consolidated Rev Forecast.xlsb").Activate
-    ThisWorkbook.Sheets(mysheets(x)).Cells(next_row, 1).PasteSpecial Paste:=xlPasteAllExceptBorders
+    ThisWorkbook.Sheets(mysheets(x)).Cells(next_row, 1).PasteSpecial Paste:=xlPasteAll
     'paste values for key
     this_sht.Range(strt_range_key & ":" & end_range_key).Copy
     Windows("Consolidated Rev Forecast.xlsb").Activate
