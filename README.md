@@ -1,5 +1,5 @@
 # excel-automation
-Codes to automate report generation &amp; prepare dashbaords in spreadsheets &amp; databases using python, VBA &amp; VBS
+Codes to automate report generation &amp; prepare dashboards in spreadsheets &amp; databases using python, VBA &amp; VBS
 
 #The details of the codes in this repository are described below-
 
