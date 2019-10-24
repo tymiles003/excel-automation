@@ -1,0 +1,29 @@
+Sub update1()
+Dim OutApp As Object
+Dim OutMail As Object
+'Dim wb As Workbook
+
+    Set OutApp = CreateObject("Outlook.Application")
+    Set OutMail = OutApp.CreateItem(0)
+    wb = ActiveSheet.Name
+
+    'On Error Resume Next
+    With OutMail
+        .to = "xyz@gmail.com"
+        '.CC = ""
+        '.BCC = ""
+        .Subject = "Automated Code"
+        .Body = "Hi there , the workbook name is " & wb
+        '.Attachments.Add ActiveWorkbook.FullName
+        
+        'You can add other files also like this
+        '.Attachments.Add ("C:\test.txt")
+        .Send
+   End With
+    'On Error GoTo 0
+
+    Set OutMail = Nothing
+    Set OutApp = Nothing
+    
+End Sub
+
