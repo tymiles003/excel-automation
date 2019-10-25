@@ -1,0 +1,4002 @@
+
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+library(shiny)
+library(xtable)
+library(readr)
+library(knitr)
+library(shinydashboard)
+library(shinythemes)
+library(htmlTable)
+library(data.table)
+library(mailR)
+library(DT)
+library(sqldf)
+library(dplyr)
+library(password)
+library(shinyWidgets)
+library(shinydashboardPlus)
+library(shinyTime)
+library(plotly)
+library(ggplot2)
+library(hrbrthemes)
+library(ggpubr)
+library(timevis)
+library(kableExtra)
+library(tidyr)
+library(gtools)
+library(tableHTML)
+
+plot.new()
+
+#signup form
+fields_signup_p<-c("signup_id","signup_lan","signup_pass1","signup_pass2")
+
+################### Sourcing ############################
+
+#Source importing steps
+source("Imports/Import_meta.R") #Import metadata, recommendations file, etc.
+
+
+#Source Functions used in the app
+source("Functions/Functions.R")
+
+
+#Source UI codes
+source("UI_Codes/Login_page_ui.R") #Used as login_page_ui
+
+source("UI_Codes/Forgot_password_ui.R") #Used as forgot_password_ui
+
+source("UI_Codes/Sign_up_page_ui.R") #Used as sign_up_page_ui
+
+source("UI_Codes/Admin_sign_in_page_ui.R") #Used as admin_login_page_ui
+
+source("UI_Codes/Admin_approval_page_ui.R") #Used as admin_approval_ui
+
+source("UI_Codes/Raise_new_incident_ui.R") #Used as Raise_inc_tab
+
+source("UI_Codes/Update_CRT_tab_ui.R") #Used as Update_CRT_tab
+
+source("UI_Codes/All_inc_tab_ui.R") #Used as All_inc_tab
+
+source("UI_Codes/Audit_trail_tab_ui.R") #Used as Audit_trail_tab
+
+source("UI_Codes/Site_imt_tab.R") 
+
+source("UI_Codes/Site_nr_tab.R") 
+
+source("UI_Codes/Site_rp_tab.R")
+
+source("UI_Codes/Summary_tab.R")
+
+source("UI_Codes/Sit_rep_tab.R")
+
+#Source Server codes
+#source("Server_Codes/Sign_up_page_server.R")
+
+
+########################## UI code ##########################
+ui <- fluidPage(
+  
+  
+  shinyjs::useShinyjs(),
+  
+  login_page_ui, #UI code for this present in Codes/Login_page_ui.R
+  
+  shinyjs::hidden(
+    sign_up_page_ui 
+  ),
+  shinyjs::hidden(
+    admin_login_page_ui 
+  ),
+  shinyjs::hidden(
+    forgot_password_ui
+  ),
+  
+  shinyjs::hidden(
+    admin_approval_ui 
+  ),
+  shinyjs::hidden(div(id="UI_page",
+                      dashboardPage(skin = "blue",
+                                    dashboardHeader(title =
+                                                      tagList(
+                                                        tags$span(class = "logo-mini", "IRM"),
+                                                        tags$span(class = "logo-lg", "Incident Response Management")),
+                                                    tags$li(class = "dropdown",
+                                                            tags$style(".main-header {max-height: 100px}"),
+                                                            tags$style(".main-header .logo {height: 100px}")),
+                                                    titleWidth = 380,
+                                                    tags$li(a(href = 'http://www.company.com',img(src = 'british_gas_logo_new.png',title = "British gas",height = "80px"),
+                                                              style = "padding-top:0px; padding-bottom:0px;"),class = "dropdown"),
+                                                    tags$li(actionLink("logout", label = "", icon = icon("power-off")), class = "dropdown")),
+                                    
+                                    dashboardSidebar(width = 320,
+                                                     tags$style(
+                                                       ".sidebar-menu {margin-top:50px}"),
+                                                     sidebarMenu(
+                                                       menuItem(tabName = "Home", "Home",icon = icon("home")),
+                                                       menuItem(tabName = "Raise_inc", "Raise incident",icon = icon("file outline")),
+                                                       menuItem(tabName = "Mod_inc", "Modify incident",icon = icon("pencil alternate"),
+                                                                menuItem(tabName = "CRT_mn", "CRT",icon = icon("edit outline")),
+                                                                menuItem(tabName = "Site_rep", "Situation Reports",icon = icon("child")),
+                                                                menuItem(tabName = "Site_imt_mn", "Site/IMT",icon = icon("user plus")),
+                                                                menuItem(tabName = "RnP_mn", "Resource & planning",icon = icon("users")),
+                                                                menuItem(tabName = "NR_mn", "National Resilience",icon = icon("child"))),
+                                                                
+                                                     
+                                                     menuItem(tabName = "All_inc", "All incidents",icon = icon("table")),
+                                                     menuItem(tabName = "Audit_inc", "Audit trail",icon = icon("wpforms")),
+                                                     menuItem(tabName = "Summary", "Summary",icon = icon("wpforms"))
+                                                     #hr()
+                                    )),
+                      
+                      dashboardBody(
+                        tags$script(HTML("$('body').addClass('sidebar-mini');")),#line added for sidebar minimizing
+                        tags$head(tags$link(rel = "stylesheet", type = "text/css", href = "custom.css")
+                        ),
+                        
+                        tabItems(
+                          Raise_inc_tab, #UI code for this present in Codes/Raise_new_incident_ui.R
+                          Update_CRT_tab,  
+                          Site_imt_tab,
+                          Site_nr_tab,
+                          Site_rp_tab,
+                          All_inc_tab,
+                          Site_repetition_tab,
+                          Audit_trail_tab,
+                          Summary_tab
+                        )))
+  )))
+
+
+####################### Server Codes ###############################
+
+server <- function(session,input, output) {
+  
+  
+  output$picture<-renderImage({
+    return(list(src = "www//Capture.png",contentType = "image/png",alt = "Banner"))}, 
+    deleteFile = FALSE) #where the src is wherever you have the picture
+  
+  
+  #Sign-up page
+  observeEvent(input$signup_link, {
+    shinyjs::disable("signup_link")
+    shinyjs::disable("admin_login")
+    shinyjs::disable("Login")
+    
+    shinyjs::show("Signup_page")
+    shinyjs::hide("Login_page")
+    
+    shinyjs::enable("signup_link")
+    shinyjs::enable("admin_login")
+    shinyjs::enable("Login")
+  })
+  
+  #Login Page
+  observeEvent(input$signup_but, {
+    shinyjs::disable("signup_but")
+    shinyjs::disable("back_signin_p")
+    
+    shinyjs::show("Login_page")
+    shinyjs::hide("Signup_page")
+    
+    shinyjs::enable("signup_but")
+    shinyjs::enable("back_signin_p")
+  })
+  
+  #back to sign-in from sign up page
+  observeEvent(input$back_signin_p, {
+    shinyjs::show("Login_page")
+    shinyjs::hide("Signup_page")
+  })
+  
+  #admin login
+  observeEvent(input$admin_login, {
+    shinyjs::disable("signup_link")
+    shinyjs::disable("admin_login")
+    shinyjs::disable("Login")
+    
+    shinyjs::show("Admin_Login_page")
+    shinyjs::hide("Login_page")
+    
+    shinyjs::enable("signup_link")
+    shinyjs::enable("admin_login")
+    shinyjs::enable("Login")
+  })
+  
+  # Admin login back to login page
+  observeEvent(input$back_signin2_p, {
+    shinyjs::disable("back_signin2_p")
+    shinyjs::disable("Admin_login_p")
+    
+    shinyjs::show("Login_page")
+    shinyjs::hide("Admin_Login_page")
+    
+    shinyjs::enable("back_signin2_p")
+    shinyjs::enable("Admin_login_p")
+  })
+  
+  #Forgot password
+  observeEvent(input$get_pass,{
+    shinyjs::show("Forgot_pass_page")
+    shinyjs::hide("Login_page")
+    
+  })
+  
+  #Back to Login Page from Forgot Password
+  observeEvent(input$back_signin3_p, {
+    shinyjs::disable("back_signin3_p")
+    shinyjs::disable("get_pass_p")
+    
+    shinyjs::show("Login_page")
+    shinyjs::hide("Forgot_pass_page")
+    
+    shinyjs::enable("back_signin3_p")
+    shinyjs::enable("get_pass_p")
+  })
+  
+  
+  ######################## Forgot password ###########################
+  observeEvent(input$get_pass_p,{
+    shinyjs::disable("get_pass_p")
+    
+    signup_data<-readRDS("Signup_data.Rda")
+    match_row_p=match(tolower(input$pass_signup_id),tolower(signup_data$Signup_email_ID),nomatch =0)
+    if (match_row_p!=0) {
+      pass_match_p=signup_data$Signup_password[match_row_p]
+      showModal(modalDialog(title = "Password sent!","Your password has been sent on the registered Email ID."))
+      
+      #Send email
+      get_pass_sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+      get_pass_recipients <- input$pass_signup_id
+      get_pass_html_body <- paste0("<html><head>
+                                 <style>
+                                 body{font-family:Calibri, sans-serif;}
+                                 table{border-left:1px solid #000000;border-top:1px solid #000000;}
+                                 table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                                 table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                                 </style>
+                                 </head><body><p>Hi,<br>",
+                                   "Please find your password for login-in to BCP Tool.<br><br>
+                                 Password: ",pass_match_p,
+                                   "<br><br>
+                                 Thanks,<br>BCP Team</p></body></html>")
+      get_pass_email <- send.mail(from = get_pass_sender,
+                                  to = get_pass_recipients,
+                                  subject="Forgot Password- BCP Tool",
+                                  body = get_pass_html_body,
+                                  smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+                                  authenticate = FALSE,
+                                  html = TRUE,
+                                  send = FALSE)
+      get_pass_email$send()
+      
+    }
+    else
+    {
+      showModal(modalDialog(title = "Check Email!","The Email ID you entered is invalid."))
+    }
+    shinyjs::enable("get_pass_p")
+  })
+  
+  #################### Login to portal #################
+  
+  observeEvent(input$Login,{
+    signup_data<-readRDS("Signup_data.Rda")
+    match_row_p=match(tolower(input$login_id),tolower(signup_data$Signup_email_ID),nomatch =0)
+    pass_match_p=signup_data$Signup_password[match_row_p]
+    user_details_p=signup_data[match_row_p,]
+    login_user_email_p=input$login_id
+    
+    if (match_row_p!=0){
+      if (input$login_pass==pass_match_p){
+        if (length(which(user_details_p=="Yes"))!=0) {
+          saveRDS(input$login_id,"Current_user.Rda")
+          shinyjs::disable("signup_link")
+          shinyjs::disable("admin_login")
+          shinyjs::disable("Login")
+          shinyjs::hide("Login_page")
+          shinyjs::show("UI_page") 
+          
+          #Modify CRT access
+          CRT_mod_access_p<-as.character(signup_data[match_row_p,4])
+          if ((CRT_mod_access_p=="Yes")){
+            shinyjs::hide("CRT_mod_log")
+            shinyjs::show("CRT_mod_pg") 
+          }
+          
+          #Site/IMT access
+          Site_imt_access_p<-as.character(signup_data[match_row_p,5])
+          if ((Site_imt_access_p=="Yes")){
+            shinyjs::hide("IMT_mod_log")
+            shinyjs::show("IMT_mod_pg") 
+          }
+          
+          #Site/RnP access
+          Site_rp_access_p<-as.character(signup_data[match_row_p,6])
+          if ((Site_rp_access_p=="Yes")){
+            shinyjs::hide("RP_mod_log")
+            shinyjs::show("RP_mod_pg") 
+          }
+          
+          #Site/NR access
+          Site_nr_access_p<-as.character(signup_data[match_row_p,7])
+          if ((Site_nr_access_p=="Yes")){
+            shinyjs::hide("NR_mod_log")
+            shinyjs::show("NR_mod_pg") 
+          }
+          
+          #All incidents access
+          all_INC_access_p<-as.character(signup_data[match_row_p,8])
+          if ((all_INC_access_p=="Yes")){
+            shinyjs::hide("all_inc_log")
+            shinyjs::show("all_inc_pg") 
+          }
+          
+          # Audit trail access
+          audit_access_p<-as.character(signup_data[match_row_p,9])
+          if ((audit_access_p=="Yes")){
+            shinyjs::hide("audit_log")
+            shinyjs::show("audit_pg") 
+          }
+          shinyjs::enable("signup_link")
+          shinyjs::enable("admin_login")
+          shinyjs::enable("Login")
+        }
+        else {
+          showModal(modalDialog(title = "User doesn't have access to any page.","ERROR"))
+        }
+      }
+      else{showModal(modalDialog(title = "Invalid Password!","ERROR"))}
+    }
+    else{showModal(modalDialog(title = "Invalid Email!","ERROR"))}
+    
+  })
+  
+  
+  #admin login
+  observeEvent(input$Admin_login_p,{
+    if ((input$admin_login_id=="admin") & (input$admin_login_pass=="admin")){
+      shinyjs::hide("Admin_Login_page")
+      shinyjs::show("Admin_UI_page") 
+    }
+    else {
+      showModal(modalDialog(title = "Incorrect username/password","ERROR"))
+    }
+  })
+  
+  
+  # logout
+  observeEvent(input$logout, {
+    shinyjs::hide("UI_page") 
+    shinyjs::show("Login_page")
+    
+    # Reset all pages to original form so that the access can be checked again
+    #Audit trail
+    shinyjs::show("audit_log")
+    shinyjs::hide("audit_pg")
+    
+    #CRT mod page
+    shinyjs::show("CRT_mod_log")
+    shinyjs::hide("CRT_mod_pg")
+    
+    #IMT mod page
+    shinyjs::show("IMT_mod_log")
+    shinyjs::hide("IMT_mod_pg")
+    
+    #NR mod page
+    shinyjs::show("NR_mod_log")
+    shinyjs::hide("NR_mod_pg")
+    
+    #All incidents page
+    shinyjs::show("all_inc_log")
+    shinyjs::hide("all_inc_pg") 
+  })
+  
+  #Admin logout
+  observeEvent(input$logout_admin, {
+    shinyjs::hide("Admin_UI_page") 
+    shinyjs::show("Admin_Login_page")
+  })
+  
+  
+  
+  ######################## Sign up to Portal ###########################
+  
+  approval_data<-reactiveValues()
+  approval_data$Data<-readRDS(file = "Signup_data.Rda")
+  
+  observeEvent(input$signup_but, {
+    shinyjs::disable("signup_but")
+    
+    y<-data.table(
+      Signup_email_ID=c(input$signup_id),
+      Signup_lan_ID=c(input$signup_lan),
+      Signup_password=password(n=10,special=c("@","#","$","&","*")),
+      CRT=c(''),
+      Site_IMT=c(''),
+      Resource_and_planning=c(''),
+      National_resilience=c(''),
+      All_incidents=c(''),
+      Audit_trail=c(''),
+      Close_incident=c(''),
+      Admin=c(''),
+      Requested_on=format(Sys.time(), "%Y%m%d-%H%M%OS"),
+      Last_change_dt=format(Sys.time(), "%Y%m%d-%H%M%OS")
+    )
+    
+    write.csv(y,"data_y.csv")
+    
+    #Checks in email
+    isValidEmail <- function(x) {
+      grepl("\\<[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\>", as.character(x), ignore.case=TRUE)
+    }
+    if (isValidEmail(y$Signup_email_ID)) {
+      if (tolower(y$Signup_email_ID) %in% tolower(unique(approval_data$Data$Signup_email_ID))){
+        showModal(modalDialog(title = "Email id already registered","Account already exists!"))
+      }
+      
+      else if (length(grep("britishgas.co.uk|centrica.com",tolower(y$Signup_email_ID)))==1){
+        approval_data$Data<-rbind(approval_data$Data,y,fill=TRUE)
+        saveRDS(approval_data$Data,file="Signup_data.Rda")
+        showModal(modalDialog(title = "Sign up successful!","A confirmation email has been sent."))
+        
+        #Send email
+        signup_sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+        signup_recipients <- c(y$Signup_email_ID,"pankaj.kumar@britishgas.co.uk","rahul.dhawan@centrica.com")
+        signup_html_body <- paste0("<html><head>
+                                   <style>
+                                   body{font-family:Calibri, sans-serif;}
+                                   table{border-left:1px solid #000000;border-top:1px solid #000000;}
+                                   table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                                   table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                                   </style>
+                                   </head><body><p>Hi,<br><br>Your sign up is successful.",
+                                   "We are sending below your password for your reference.<br><br>
+                                   Password: ",y$Signup_password,
+                                   "<br><br>You can login after you receive approval message.<br><br>
+                                   Thanks,<br>BCP Team</p></body></html>")
+        signup_email <- send.mail(from = signup_sender,
+                                  to = signup_recipients,
+                                  subject="Sign up successful- BCP Tool",
+                                  body = signup_html_body,
+                                  smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+                                  authenticate = FALSE,
+                                  html = TRUE,
+                                  send = FALSE)
+        signup_email$send()
+      }
+      else {showModal(modalDialog(title = "Not a valid Email ID","ERROR"))}
+    }
+    else {showModal(modalDialog(title = "Incorrect email","ERROR"))}
+    shinyjs::enable("signup_but")}
+    
+  )
+  
+  
+  ####################### Admin approval page ##########################
+  
+  #manage access requests-pankaj
+  output$Main_table_access<-renderDataTable({
+    z_access_pending<-approval_data$Data
+    z_access_pending<-select(z_access_pending,-c("Signup_password"))
+    
+    z_access_pending[["Actions"]]<-
+      paste0('
+             <div class="btn-group" role="group" aria-label="Basic example">
+             <button type="button" class="btn btn-secondary delete" id=approve_',1:nrow(z_access_pending),'>Grant access</button><br><br>
+             </div>
+             ')
+    datatable(z_access_pending,options = list(dom = 'ftpli',scrollX=TRUE),rownames = FALSE,
+              escape=F)})
+  
+  observeEvent(input$lastClick,
+               {
+                 if (input$lastClickId%like%"approve")
+                 {
+                   selected_row=as.numeric(gsub("approve_","",input$lastClickId))
+                   old_row=approval_data$Data[selected_row]
+                   
+                   grant_access_modal<-reactive(fluidPage(
+                     
+                     h3(strong("Grant/revoke access for users"),align="center"),
+                     hr(),
+                     
+                     fluidRow(column(6,paste0("User email ID: ",old_row$Signup_email_ID))),
+                     hr(),
+                     fluidRow(column(6,paste0("User lan ID: ",old_row$Signup_lan_ID))),
+                     hr(),
+                     
+                     fluidRow(column(6,selectInput("CRT_acc","CRT (raise/amend):",c("", "Yes","No"),selected = old_row$CRT))),
+                     fluidRow(column(6,selectInput("Site_IMT_acc","Site/IMT:",c("", "Yes","No"),selected = old_row$Site_IMT))),
+                     fluidRow(column(6,selectInput("Resource_and_planning_acc","Resource and planning:",c("", "Yes","No"),selected = old_row$Resource_and_planning))),
+                     fluidRow(column(6,selectInput("National_resilience_acc","National resilience:",c("", "Yes","No"),selected = old_row$National_resilience))),
+                     fluidRow(column(6,selectInput("All_incidents_acc","All incidents:",c("", "Yes","No"),selected = old_row$All_incidents))),
+                     fluidRow(column(6,selectInput("Audit_trail_acc","Audit trail:",c("", "Yes","No"),selected = old_row$Audit_trail))),
+                     fluidRow(column(6,selectInput("Close_incident_acc","Close incident:",c("", "Yes","No"),selected = old_row$Close_incident))),
+                     fluidRow(column(6,selectInput("Admin_acc","Admin access:",c("", "Yes","No"),selected = old_row$Admin))),
+                     
+                     hr(),
+                     
+                     actionButton("access_approved","Confirm changes"),
+                     
+                     tags$script(HTML("$(document).on('click', '#save_changes', function () {
+                                      var list_value=[]
+                                      for (i = 0; i < $( '.new_input' ).length; i++)
+                                      {
+                                      list_value.push($( '.new_input' )[i].value)
+                                      }
+                                      Shiny.onInputChange('newValue', list_value)
+                 });"))))
+                   showModal(modalDialog(grant_access_modal(),easyClose=TRUE))
+                 }})
+  
+  
+  observeEvent(input$access_approved, {
+    shinyjs::disable("access_approved")
+    
+    selected_row=as.numeric(gsub("approve_","",input$lastClickId))
+    old_row=approval_data$Data[selected_row]
+    
+    approval_data$Data[selected_row]<-data.table(
+      Signup_email_ID=c(old_row$Signup_email_ID),
+      Signup_lan_ID=c(old_row$Signup_lan_ID),
+      Signup_password=c(old_row$Signup_password),
+      CRT=c(input$CRT_acc),
+      Site_IMT=c(input$Site_IMT_acc),
+      Resource_and_planning=c(input$Resource_and_planning_acc),
+      National_resilience=c(input$National_resilience_acc),
+      All_incidents=c(input$All_incidents_acc),
+      Audit_trail=c(input$Audit_trail_acc),
+      Close_incident=c(input$Close_incident_acc),
+      Admin=c(input$Admin_acc),
+      Requested_on=c(old_row$Requested_on),
+      Last_change_dt=format(Sys.time(), "%Y%m%d-%H%M%OS")
+    )
+    
+    saveRDS(approval_data$Data,"Signup_data.Rda")
+    removeModal()
+    
+    user_access_summary <- htmlTable(approval_data$Data[selected_row], rnames = FALSE)
+    
+    
+    
+    ################ Approval mail #################
+    approval_sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address "Rahul.Dhawan@centrica.com"
+    approval_recipients <- c(old_row$Signup_email_ID,"abhiram.patankar@centrica.com","pankaj.kumar@britishgas.co.uk","Rahul.Dhawan@centrica.com" )
+    approval_html_body <- paste0("<html><head>
+                               <style>
+                               body{font-family:Calibri, sans-serif;}
+                               table{border-left:1px solid #000000;border-top:1px solid #000000;}
+                               table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                               table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                               </style>
+                               </head><body><p>Hi,<br><br>Success!<br>You can now sign-in into the incident response tool.<br>",
+                                 "You have access to the following tabs- ",
+                                 user_access_summary,
+                                 "Link: https://azsu-p-app-026.azure.uk.centricaplc.com:3939/connect/#/apps/179/access",
+                                 "<br> <br>
+                               Thanks, <br> Business assurance team</p></body></html>")
+    approval_email <- send.mail(from = approval_sender,
+                                to = approval_recipients,
+                                subject="BCP tool approval",
+                                body = approval_html_body,
+                                smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+                                authenticate = FALSE,
+                                html = TRUE,
+                                send = FALSE)
+    approval_email$send()
+    
+    
+    shinyjs::enable("access_approved")
+  }
+  )
+  
+  ###################### New incident page  ####################
+  
+  #### Modify dropdowns according to the site selected
+  updatebusarea<-function(session){
+    req(input$Site)
+    business_filter<-sqldf(paste0("select * from Recommendations where site = '",input$Site,"'"))
+    updateAwesomeCheckboxGroup(session,inputId = "Bus_Ar",label="Business Area",choices=c(unique(business_filter$Business_Area)))}
+  observeEvent(input$Site,updatebusarea(session))  
+  
+  updateproarea1<-function(session){
+    req(input$Site)
+    process_filter_a<-sqldf(paste0("select * from Recommendations where site = '",input$Site,"'"))
+    updateAwesomeCheckboxGroup(session,inputId = "pro_Ar",label="Process Area", choices=c(unique(process_filter_a$Process)))}
+  observeEvent(input$Site,updateproarea1(session))
+  
+  updateproarea<-function(session){
+    req(input$Bus_Ar)
+    process_filter_a<-sqldf(paste0("select * from Recommendations where site = '",input$Site,"'"))
+    process_filter<- process_filter_a %>% filter(Business_Area %in% input$Bus_Ar)
+    updateAwesomeCheckboxGroup(session,inputId = "pro_Ar", label="Process Area",choices=c(unique(process_filter$Process)))}
+  observeEvent(input$Bus_Ar,updateproarea(session))
+  
+  #Get recommendations
+  observeEvent(input$get_reco,{
+    if (input$get_reco=="Show"){
+      shinyjs::show("Get_reco_new_inc")}
+    else if 
+    (input$get_reco=="Hide") { 
+      shinyjs::hide("Get_reco_new_inc")}
+  })
+  
+  #Show details for conn required
+  observeEvent(input$comm_req,{
+    if (input$comm_req==TRUE){
+      shinyjs::show("comm_requ_details")}
+    else if 
+    (input$comm_req==FALSE) {
+      shinyjs::hide("comm_requ_details")}
+  })
+  
+  #other sys req
+  observeEvent(input$systems,{
+    if ('Other' %in% input$systems==TRUE){
+      shinyjs::show("other_sys_req")}
+    else {
+      shinyjs::hide("other_sys_req")
+    }
+  })
+  
+  observeEvent(input$facilities,{
+    if ('Other' %in% input$facilities==TRUE){
+      shinyjs::show("other_fac_req")}
+    else {
+      shinyjs::hide("other_fac_req")
+    }
+  })
+  
+  observeEvent(input$operational_call,{
+    if (input$operational_call==TRUE){
+      shinyjs::show("ops_call_details")}
+    else {
+      
+      shinyjs::hide("ops_call_details")
+    }
+  })
+  
+  
+  
+  #Disable Add site button if selections have not been made
+  observe({
+    mandatoryFilled <-
+      vapply(fieldsMandatory,
+             function(x) {
+               !is.null(input[[x]]) && input[[x]] != ""
+             },
+             logical(1))
+    mandatoryFilled <- all(mandatoryFilled)
+    shinyjs::toggleState(id = "addsite", condition = mandatoryFilled)
+  })    
+  
+  
+  
+  
+  #Disable Submit button if no sites have been addded to the incident
+  observe({
+    if (count(subset(vals$Data,Site!=""))>0) {
+      shinyjs::enable("submit")
+    } else {
+      shinyjs::disable("submit")
+    }
+  })
+  
+  
+  
+  #saveData function
+  saveData <- function(session) {
+
+    time_final<-format(Sys.time(), "%Y%m%d-%H%M%OS")
+    vals$Data$Date_time<-time_final
+    write.csv(x = vals$Data, file = paste0("Data_crt_site/Mydata_site_",format(Sys.time(), "%Y%m%d-%H%M%OS"),".csv"))
+  }
+
+  
+  #Make All incidents data a reactive data
+  all_INC_data<-reactiveValues()
+  all_INC_data$Data<-loadData_crt_site()
+  
+  
+  #action to take when add site button is pressed
+  vals<-reactiveValues()
+  vals$Data<-data.table(
+    Site=c(''),
+    Business_area=c(''),
+    Process=c(''),
+    Description=c(''),
+    Teams=c(''),
+    People=c(''),
+    Customer_contact=c(''),
+    Systems=c(''),
+    Systems_other=c(''),
+    Facilities=c(''),
+    Facilities_other=c(''),
+    Vulnurable_customers=c('')
+  )
+ 
+  observeEvent(input$addsite,{
+    shinyjs::disable(("addsite"))
+    
+    add_site_info<-data.table(
+      Site=c(input$Site),
+      Business_area=c(paste(input$Bus_Ar,collapse="-")),
+      Process=c(paste(input$pro_Ar, collapse="-")),
+      Description=c(paste(input$desc)),
+      Teams=c(paste(input$eng_team, collapse="-")),
+      People=c(paste(input$People)),
+      Customer_contact=c(paste(input$cust_cont, collapse="-")),
+      
+      Systems=c(ifelse('Other' %in% input$systems==TRUE,paste(append(input$systems,input$other_system),collapse="-"),paste(input$systems,collapse="-"))),
+      Systems_other=c(ifelse('Other' %in% input$systems==TRUE,paste(input$other_system),c(''))),
+      
+      Facilities=c(ifelse('Other' %in% input$facilities==TRUE,paste(append(input$facilities,input$other_fac),collapse="-"),paste(input$facilities,collapse="-"))),
+      Facilities_other=c(ifelse('Other' %in% input$facilities==TRUE,paste(input$other_fac),c(''))),
+      Vulnurable_customers=c(input$vuln_cust)
+    )
+    
+    vals$Data<-rbind(add_site_info,vals$Data,fill=TRUE)
+    
+    vals$Data<-subset(vals$Data,Site!="")
+    
+    #display details of added site below
+    output$tempSite<-renderUI({
+      fluidPage(
+        h3(strong("The below site/s will be added to the incident")),
+        hr(),
+        column(12,dataTableOutput("Main_table")),
+        tags$script(HTML('$(document).on("click", "input", function () {
+                         var checkboxes = document.getElementsByName("row_selected");
+                         var checkboxesChecked = [];
+                         for (var i=0; i<checkboxes.length; i++) {
+                         if (checkboxes[i].checked) {
+                         checkboxesChecked.push(checkboxes[i].value);
+                         }
+                         }
+                         Shiny.onInputChange("checked_rows",checkboxesChecked);
+          })')),
+        tags$script("$(document).on('click', '#Main_table button', function () {
+                        Shiny.onInputChange('lastClickId',this.id);
+                        Shiny.onInputChange('lastClick', Math.random())
+          });"))
+    })
+    shinyjs::reset("form")
+    shinyjs::enable(("addsite"))
+  })
+  
+  
+  
+  output$Main_table<-renderDataTable({
+    DT=vals$Data
+    DT[["Actions"]]<-
+      paste0('
+             <div class="btn-group" role="group" aria-label="Basic example">
+             <button type="button" class="btn btn-secondary delete" id=delete_',1:nrow(vals$Data),'>Delete</button>
+             </div>
+             ')
+    
+    datatable(DT, escape=F, options=list(scrollX=TRUE))})
+  
+  
+  observeEvent(input$lastClick,
+               {
+                 if (input$lastClickId%like%"delete")
+                 {
+                   row_to_del=as.numeric(gsub("delete_","",input$lastClickId))
+                   vals$Data=vals$Data[-row_to_del]
+                 }
+               }) 
+  
+  
+  # Get recommendations
+  output$reco_new<-DT::renderDataTable(
+    Recommendations %>% filter (Recommendations$Business_Area %in% unlist(strsplit(as.character(vals$Data$Business_area),"-")) & 
+                                  Recommendations$Process %in% unlist(strsplit(as.character(vals$Data$Process),"-")) & 
+                                  Recommendations$Site %in% unlist(strsplit(as.character(vals$Data$Site),"-"))),
+    editable=FALSE,
+    options = list(scrollX=TRUE),escape=F)
+  
+
+  
+  
+  
+  ######################### Submit new Incident ########################
+  observeEvent(input$submit, {
+    
+    shinyjs::disable("submit")
+    shinyjs::show("submit_msg")
+    
+    #Get max INC available to assign new INC for the current submission
+    All_data<-loadData_crt_site()
+    lat_INC<-max(All_data$INC,na.rm = TRUE)
+    vals$Data$INC<-lat_INC+1
+    current_user_p<-readRDS("Current_user.Rda")
+    
+    vals$Data$Changed<-c('')
+    vals$Data$Is_current<-1
+    
+    vals$Data$User<-current_user_p
+    
+    crt_comms<-data.table(
+      INC=vals$Data$INC,
+      Comms_required=c(input$comm_req),
+      Incident_number=ifelse(input$comm_req==FALSE,c(''),c(input$inc_no)),
+      SLT=ifelse(input$comm_req==FALSE,c('FALSE'),c(input$head_comm)),
+      IMT=ifelse(input$comm_req==FALSE,c('FALSE'),c(input$imt)),
+      People_comms=ifelse(input$comm_req==FALSE,c('FALSE'),c(input$people_comms)),
+      Operations_invoked=ifelse(input$comm_req==FALSE,c('FALSE'),c(input$operations_invok)),
+      Changed=vals$Data$Changed,
+      Is_current=vals$Data$Is_current,
+      Date_time=format(Sys.time(), "%Y%m%d-%H%M%OS"),
+      User=vals$Data$User)
+    write_csv(crt_comms[1],path=paste0("Data_crt_comms/Mydata_comms_",format(Sys.time(), "%Y%m%d-%H%M%OS"),".csv"))
+    
+    crt_ops<-data.table(
+      INC=vals$Data$INC,
+      Operational_call=c(input$operational_call),
+      Date_op=ifelse(input$operational_call=='FALSE',c(''),c(paste(input$enter_date))),
+      Time_op=ifelse(input$operational_call=='FALSE',c(paste(Sys.Date())),c(format(input$enter_time,"%H:%M"))), 
+      Time_op1=ifelse(input$operational_call==FALSE,c(paste(Sys.Date())),c(paste(input$enter_time))),
+      Changed=vals$Data$Changed,
+      Is_current= vals$Data$Is_current,
+      Date_time=format(Sys.time(), "%Y%m%d-%H%M%OS"),
+      User=vals$Data$User)
+    write_csv(crt_ops[1],path = paste0("Data_crt_ops/Mydata_ops_",format(Sys.time(), "%Y%m%d-%H%M%OS"),".csv"))
+    
+    comms1=subset(crt_comms[1],select=-c(Changed,Is_current,User,Date_time))
+    ops1=subset(crt_ops[1],select=-c(Time_op1,Changed,Is_current,User,Date_time))
+    
+    crt_site_temp<-subset(vals$Data,select=-c(Systems_other,Facilities_other))
+    comms_ops<-merge(comms1,ops1,by="INC")
+    #comms_ops_site<-merge(crt_site,comms_ops,by="INC")
+    comms_ops_site<-sqldf("select a.*,b.Comms_required,b.Incident_number,b.SLT,b.IMT,b.People_comms,b.Operations_invoked,
+                          b.Operational_call,b.Date_op,b.Time_op from crt_site_temp a left join comms_ops b on a.INC=b.INC")
+    
+    #Send email for new incident
+    sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+    recipients <- current_user_p # Replace with one or more valid addresses
+    
+    # Convert the data frame into an HTML Table
+    y <- htmlTable(comms_ops_site, rnames = FALSE)
+    
+    # Define body of email
+    html_body <- paste0("<html><head>
+                        <style>
+                        body{font-family:BG Flame, sans-serif;}
+                        table{border-left:1px solid #000000;border-top:1px solid #000000;width: 1000px;}
+                        table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        img {width: 1000px;}
+                        </style>
+                        </head><body><table>
+                        <tr><td><img src='https://azsu-p-app-026.azure.uk.centricaplc.com:3939/content/179/_w_a9641ffb/heading_bar.png'/></td></tr>
+                        <tr><td><h2 style='font-family:BG Flame; background-color:#00BFFF;'>New Incident Raised</h2><br>
+                        <b>Site Impacted: </b>",paste0(vals$Data$Site,collapse="-"),"<br><br>
+                        <b>Business Area Impacted: </b>",paste0(vals$Data$Business_area,collapse="-"),"<br><br>
+                        <b>Process Area Impacted: </b>",paste0(vals$Data$Process,collapse="-"),"<br><br>
+                        <b>Business Area Impacted: </b>",paste0(vals$Data$Business_area,collapse="-"),"<br><br>
+                        <b>Teams Impacted: </b>",paste0(vals$Data$Teams,collapse="-"),"<br><br>
+                        <b>Incident Description: </b>",paste0(vals$Data$Description,collapse="-"),"<br><br>
+                        <b>Last update to the incident: </b>",y,"</td></tr>
+                        </table></body></html>")
+    
+    email_new_inc <- send.mail(from = sender,
+                               to = recipients,
+                               subject="New incident raised",
+                               body = html_body,
+                               smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+                               authenticate = FALSE,
+                               html = TRUE,
+                               send = FALSE)
+    email_new_inc$send()
+    
+    
+    
+    shinyjs::hide("error")
+    
+    tryCatch({
+      
+      
+      saveData(formData())
+      
+      all_INC_data$Data<-loadData_crt_site()
+
+      shinyjs::reset("form")
+      shinyjs::hide("form")
+      
+    },
+    error = function(err) {
+      shinyjs::html("error_msg", err$message)
+      shinyjs::show(id = "error", anim = TRUE, animType = "fade")
+    },
+    finally = {
+      shinyjs::enable("submit")
+      shinyjs::hide("submit_msg")
+    })
+    
+    
+    #### empty table for site IMT/NR/RP- New Inc #####
+    vals2_imt$Data<-data.table(
+      INC=c(vals$Data$INC),
+      Site=c(vals$Data$Site),
+      Who_is_impacted=c(''),
+      Estimated_volume_of_users_impacted=c(''),
+      Root_cause=c(''),
+      Timescales_for_recovery=c(''),
+      IMT=c(''),
+      Comms=c(''),
+      Site_continuity=c(''),
+      Description=c(''),
+      Changed_imt=c(''),
+      Is_current_imt=1,
+      Date_time_imt=format(Sys.time(), "%Y%m%d-%H%M%OS")
+    )
+    # write IMT table
+    write.csv(vals2_imt$Data, file = paste0("Data_site_IMT/IMT_Mydata", format(Sys.time(), "%Y%m%d-%H%M%S"), ".csv"))
+    
+    # empty table for site NR- New Inc
+    vals3_nr$Data<-data.table(
+      INC=c(vals$Data$INC),
+      Site=c(vals$Data$Site),
+      Action_required=c(''),
+      Sungard_required=c(''),
+      Sungard_available=c(''),
+      Sungard_accessible=c(''),
+      Escalation_required=c(''),
+      Escalated_to=c(''),
+      Comments=c(''),
+      Changed_nr=c(''),
+      Is_current_nr=1,
+      Date_time_nr=format(Sys.time(), "%Y%m%d-%H%M%OS")
+      
+    )
+    # write NR table
+    write.csv(vals3_nr$Data, file = paste0("Data_site_NR/NR_Mydata", format(Sys.time(), "%Y%m%d-%H%M%S"), ".csv"))
+    
+    # enmpty table for RnP- New Inc
+    Recommendations_rp <- Recommendations %>% filter (Recommendations$Business_Area %in% unlist(strsplit(as.character(vals$Data$Business_area),"-")) &
+                                                        Recommendations$Process %in% unlist(strsplit(as.character(vals$Data$Process),"-")) &
+                                                        Recommendations$Site %in% unlist(strsplit(as.character(vals$Data$Site),"-")))
+    vals4_rp$Data<-data.table(
+      INC_rp=c(vals$Data$INC),
+      Site_rp=c(Recommendations_rp$Site),
+      Business_area_rp=c(Recommendations_rp$Business_Area),
+      Process_rp=c(Recommendations_rp$Process),
+      Team_name_rp=c(Recommendations_rp$`Team Name`),
+      Priority_rp=c(Recommendations_rp$`Priority rating`),
+      BG_site_rp=c(Recommendations_rp$`Confirmed BG site synergy`),
+      Third_party_rp=c(Recommendations_rp$`3rd party site synergy`),
+      Timescale_rp=c(''),
+      IVR_messaging=c(''),
+      Online_messaging=c(''),
+      Line_closure=c(''),
+      Line_closed_Free_Text=c(''),
+      Call_routing=c(''),
+      BG_site_rp_new=c(''),
+      Third_Party_new=c(''),
+      Changed_rp=c(''),
+      Is_current_rp=1,
+      Date_time_rp=format(Sys.time(), "%Y%m%d-%H%M%OS")
+    )
+    write.csv(vals4_rp$Data, file = paste0("Data_site_RP/RP_Mydata", format(Sys.time(), "%Y%m%d-%H%M%S"), ".csv"))
+    
+    
+    
+    
+    #Reset everything to original Null state
+    vals$Data<-data.table(
+      INC=0,
+      Site=c(''),
+      Business_area=c(''),
+      Process=c(''),
+      Description=c(''),
+      Teams=c(''),
+      People=c(''),
+      Customer_contact=c(''),
+      Systems=c(''),
+      Systems_other=c(''),
+      Facilities=c(''),
+      Facilities_other=c(''),
+      Vulnurable_customers=c(''))
+    
+    crt_comms<-data.table(
+      INC=0,
+      Comms_required=c(''),
+      Incident_number=c(''),
+      SLT=c(''),
+      IMT=c(''),
+      People_comms=c(''),
+      Operations_invoked=c(''))
+    
+    crt_ops<-data.table(
+      INC=0,
+      Operational_call=c(''),
+      Date_op=c(''),
+      Time_op=c(''),
+      Time_op1=c(''))
+    
+    updateTimeInput(session,"enter_time",value="2019-09-09 BST")
+    
+    output$tempSite<-renderUI({
+      fluidPage(
+        tags$script(HTML('$(document).on("click", "input", function () {
+                         var checkboxes = document.getElementsByName("row_selected");
+                         var checkboxesChecked = [];
+                         for (var i=0; i<checkboxes.length; i++) {
+                         if (checkboxes[i].checked) {
+                         checkboxesChecked.push(checkboxes[i].value);
+                         }
+                         }
+                         Shiny.onInputChange("checked_rows",checkboxesChecked);
+          })')),
+        tags$script("$(document).on('click', '#Main_table button', function () {
+                        Shiny.onInputChange('lastClickId',this.id);
+                        Shiny.onInputChange('lastClick', Math.random())
+          });"))
+    })
+    
+    All_data<-loadData_crt_site()
+    lat_INC<-max(All_data$INC,na.rm = TRUE)
+    sendSweetAlert(
+      session = session,
+      title = "Success !!",
+      text = paste("Incident number ",lat_INC,"raised!"),
+      type = "success"
+    )
+    
+    #updateTimeInput(session,"enter_time",value="2019-09-09 BST")
+    # 
+    crt_data$Data<-loadData_crt_site()
+    imt_data$Data<-loadData_site_imt()
+    nr_data$Data<-loadData_site_nr()
+    rp_data$Data<-loadData_site_rp()
+    
+    shinyjs::reset("form")
+    shinyjs::show("form")
+    shinyjs::reset("form1")
+    shinyjs::show("form1")
+  })
+  
+  
+  
+  
+  #All incidents recorded
+  output$All_inc <- DT::renderDataTable(
+    #filter(all_INC_data$Data,Is_current==1) ,rownames=FALSE,options=list(scrollX=TRUE,autowidth=TRUE)) 
+    all_INC_data$Data[,-1],rownames=FALSE,options=list(scrollX=TRUE,autowidth=TRUE)) 
+  
+  #Download data
+  output$downloaddata <- downloadHandler(
+    filename = function() {
+      "All_incidents.csv"
+    },
+    content = function(file) {
+      write.csv(loadData_new(),file, row.names = FALSE)
+    })
+  
+  
+  ####################### Update CRT #####################
+  
+  #Refresh incident numbers in CRT modifications
+  
+  observeEvent(input$Refresh_btn,{
+    updateSelectInput(session,inputId = "CRT_mod_inc",label="Enter incident number:",
+                      choices=c("",unique(all_INC_data$Data$INC)),selected="")
+  })
+  
+  
+  ####### Add or amend or comms or ops radio button ##########
+  observeEvent(input$Add_or_amend_or_comms_or_ops,{
+    if (input$Add_or_amend_or_comms_or_ops=="Add Site"){
+      shinyjs::show("add_site_form")
+      shinyjs::hide("amend_site_form")
+      shinyjs::hide("ammend_comms_form")
+      shinyjs::hide("crt_ops_form")
+    }
+    else if (input$Add_or_amend_or_comms_or_ops=="Amend Site") {
+      shinyjs::hide("add_site_form")
+      shinyjs::show("amend_site_form")
+      shinyjs::hide("ammend_comms_form")
+      shinyjs::hide("crt_ops_form")
+    }
+    else if (input$Add_or_amend_or_comms_or_ops=="Amend Comms") {
+      shinyjs::hide("add_site_form")
+      shinyjs::hide("amend_site_form")
+      shinyjs::show("ammend_comms_form")
+      shinyjs::hide("crt_ops_form")
+    }
+    else if (input$Add_or_amend_or_comms_or_ops=="Amend Operational Details") {
+      shinyjs::hide("add_site_form")
+      shinyjs::hide("amend_site_form")
+      shinyjs::hide("ammend_comms_form")
+      shinyjs::show("crt_ops_form")
+    }
+  }
+  )
+  
+  
+  
+  ### Add site to existing incident
+
+  
+  #Modify business area dropdowns
+  updatebusarea_crt_add<-function(session){
+    req(input$Site_add)
+    business_filter<-sqldf(paste0("select * from Recommendations where site = '",input$Site_add,"'"))
+    updateAwesomeCheckboxGroup(session,inputId = "Bus_Ar_add",label="Business Area:",choices=c(unique(business_filter$Business_Area)))}
+  observeEvent(input$Site_add,updatebusarea_crt_add(session))  
+  
+  updateproarea1_crt_add<-function(session){
+    req(input$Site_add)
+    process_filter_a<-sqldf(paste0("select * from Recommendations where site = '",input$Site_add,"'"))
+    updateAwesomeCheckboxGroup(session,inputId = "pro_Ar_add",label="Process Area:", choices=c(unique(process_filter_a$Process)))}
+  observeEvent(input$Site_add,updateproarea1_crt_add(session))
+  
+  updateproarea_crt_add<-function(session){
+    req(input$Bus_Ar_add)
+    process_filter_a<-sqldf(paste0("select * from Recommendations where site = '",input$Site_add,"'"))
+    process_filter<- process_filter_a %>% filter(Business_Area %in% input$Bus_Ar_add)
+    updateAwesomeCheckboxGroup(session,inputId = "pro_Ar_add", label="Process Area:",choices=c(unique(process_filter$Process)))}
+  observeEvent(input$Bus_Ar_add,updateproarea_crt_add(session))
+  
+  
+  #### Disable Add site button if selections have not been made
+  observe({
+    mandatoryFilled_crt_add <-
+      vapply(fieldsMandatory_crt_add,
+             function(x) {
+               !is.null(input[[x]]) && input[[x]] != ""
+             },
+             logical(1))
+    mandatoryFilled_crt_add <- all(mandatoryFilled_crt_add)
+    shinyjs::toggleState(id = "addsite_add", condition = mandatoryFilled_crt_add)
+  })    
+  
+  #other sys req- add site
+  observeEvent(input$systems_add,{
+    if ('Other' %in% input$systems_add==TRUE){
+      shinyjs::show("other_sys_req_add")}
+    else {
+      shinyjs::hide("other_sys_req_add")
+    }
+  })
+  
+  #other fac req- add site
+  observeEvent(input$facilities_add,{
+    if ('Other' %in% input$facilities_add==TRUE){
+      shinyjs::show("other_fac_req_add")}
+    else {
+      shinyjs::hide("other_fac_req_add")
+    }
+  })
+  
+  #### Disable Submit button if no sites have been addded to the incident
+  observe({
+    if (count(subset(vals_crt_add$Data,Site!=""))>0) {
+      shinyjs::enable("submit_add")
+    } else {
+      shinyjs::disable("submit_add")
+    }
+  })
+  
+  
+  #save new site function
+  saveData_crt_add <- function(session) {
+    time_final<-format(Sys.time(), "%Y%m%d-%H%M%OS")
+    vals_crt_add$Data$Date_time<-time_final
+    write.csv(x = vals_crt_add$Data, file = paste0("Data_crt_site/Mydata_site_",time_final,".csv"))}
+  
+  
+  
+  vals_crt_add<-reactiveValues()
+  vals_crt_add$Data<-data.table(
+    Site=c(''),
+    Business_area=c(''),
+    Process=c(''),
+    Description=c(''),
+    Teams=c(''),
+    People=c(''),
+    Customer_contact=c(''),
+    Systems=c(''),
+    Systems_other=c(''),
+    Facilities=c(''),
+    Facilities_other=c(''),
+    Vulnurable_customers=c('')
+  )
+  
+  observeEvent(input$addsite_add,{
+    shinyjs::disable(("addsite_add"))
+    
+    add_site_info<-data.table(
+      Site=c(input$Site_add),
+      Business_area=c(paste(input$Bus_Ar_add,collapse="-")),
+      Process=c(paste(input$pro_Ar_add, collapse="-")),
+      Description=c(paste(input$desc_add)),
+      Teams=c(paste(input$eng_team_add, collapse="-")),
+      People=c(paste(input$People_add)),
+      Customer_contact=c(paste(input$cust_cont_add, collapse="-")),
+      
+      Systems=c(ifelse('Other' %in% input$systems_add==TRUE,paste(append(input$systems_add,input$other_system_add),collapse="-"),paste(input$systems_add,collapse="-"))),
+      Systems_other=c(ifelse('Other' %in% input$systems_add==TRUE,paste(input$other_system_add),c(''))),
+      Facilities=c(ifelse('Other' %in% input$facilities_add==TRUE,paste(append(input$facilities_add,input$other_fac_add),collapse="-"),paste(input$facilities_add,collapse="-"))),
+      Facilities_other=c(ifelse('Other' %in% input$facilities_add==TRUE,paste(input$other_fac_add),c(''))),
+      Vulnurable_customers=c(input$vuln_cust_add))
+    
+    vals_crt_add$Data<-rbind(add_site_info,vals_crt_add$Data,fill=TRUE)
+    vals_crt_add$Data<-subset(vals_crt_add$Data,Site!="")
+    
+    
+    #display details of added site below
+    output$tempSite_add<-renderUI({
+      fluidPage(
+        h3(strong("The below site/s will be added to the incident")),
+        hr(),
+        column(12,dataTableOutput("Main_table_crt_add")),
+        tags$script(HTML('$(document).on("click", "input", function () {
+                         var checkboxes = document.getElementsByName("row_selected");
+                         var checkboxesChecked = [];
+                         for (var i=0; i<checkboxes.length; i++) {
+                         if (checkboxes[i].checked) {
+                         checkboxesChecked.push(checkboxes[i].value);
+                         }
+                         }
+                         Shiny.onInputChange("checked_rows",checkboxesChecked);
+    })')),
+        tags$script("$(document).on('click', '#Main_table_crt_add button', function () {
+                    Shiny.onInputChange('lastClickId',this.id);
+                    Shiny.onInputChange('lastClick', Math.random())
+  });"))
+    })
+    
+    shinyjs::reset("amend_site_form")
+    shinyjs::enable(("addsite_add"))
+  })
+  
+  
+  output$Main_table_crt_add<-renderDataTable({
+    DT=vals_crt_add$Data
+    DT[["Actions"]]<-
+      paste0('
+             <div class="btn-group" role="group" aria-label="Basic example">
+             <button type="button" class="btn btn-secondary delete" id=m_delete_',1:nrow(vals_crt_add$Data),'>Delete</button>
+             </div>
+             ')
+    datatable(DT,
+              escape=F,
+              options=list(scrollX=TRUE))})
+  
+  
+  observeEvent(input$lastClick,
+               {
+                 if (input$lastClickId%like%"m_delete")
+                 {
+                   row_to_del=as.numeric(gsub("m_delete_","",input$lastClickId))
+                   vals_crt_add$Data=vals_crt_add$Data[-row_to_del]
+                 }}) 
+  
+  
+  
+  ###### Add CRT sites ###############
+  observeEvent(input$submit_add, {
+    
+    vals_crt_add$Data$INC<-input$CRT_mod_inc
+    vals_crt_add$Data$Is_current<-1
+    vals_crt_add$Data$Changed<-c('')
+    
+    vals_crt_add$Data$User<-readRDS("Current_user.Rda")
+    
+    
+    shinyjs::disable("submit")
+    shinyjs::show("submit_msg")
+    shinyjs::hide("error")
+    
+    tryCatch({
+      saveData_crt_add(formData())
+      #all_INC_data$Data<-loadData_new()
+      shinyjs::reset("add_site_form")
+    },
+    error = function(err) {
+      shinyjs::html("error_msg", err$message)
+      shinyjs::show(id = "error", anim = TRUE, animType = "fade")
+    },
+    finally = {
+      shinyjs::enable("submit_add")
+      shinyjs::hide("submit_msg")
+    })
+    
+    
+    
+    
+### empty table for site IMT/NR/RP- Amend CRT #####
+    vals2_imt$Data<-data.table(
+      INC=c(vals_crt_add$Data$INC),
+      Site=c(vals_crt_add$Data$Site),
+      Who_is_impacted=c(''),
+      Estimated_volume_of_users_impacted=c(''),
+      Root_cause=c(''),
+      Timescales_for_recovery=c(''),
+      IMT=c(''),
+      Comms=c(''),
+      Site_continuity=c(''),
+      Description=c(''),
+      Changed_imt=c(''),
+      Is_current_imt=1,
+      Date_time_imt=format(Sys.time(), "%Y%m%d-%H%M%OS")
+    )
+    # write IMT table
+    write.csv(vals2_imt$Data, file = paste0("Data_site_IMT/IMT_Mydata", format(Sys.time(), "%Y%m%d-%H%M%S"), ".csv"))
+    
+    # empty table for site NR- Amend CRT
+    vals3_nr$Data<-data.table(
+      INC=c(vals_crt_add$Data$INC),
+      Site=c(vals_crt_add$Data$Site),
+      Action_required=c(''),
+      Sungard_required=c(''),
+      Sungard_available=c(''),
+      Sungard_accessible=c(''),
+      Escalation_required=c(''),
+      Escalated_to=c(''),
+      Comments=c(''),
+      Changed_nr=c(''),
+      Is_current_nr=1,
+      Date_time_nr=format(Sys.time(), "%Y%m%d-%H%M%OS")
+      
+    )
+    # write NR table
+    write.csv(vals3_nr$Data, file = paste0("Data_site_NR/NR_Mydata", format(Sys.time(), "%Y%m%d-%H%M%S"), ".csv"))
+    
+    # empty table for RnP- Amend CRT
+    Recommendations_rp <-Recommendations %>% 
+      filter (Recommendations$Business_Area %in% unlist(strsplit(as.character(vals_crt_add$Data$Business_area),"-")) & 
+                Recommendations$Process %in% unlist(strsplit(as.character(vals_crt_add$Data$Process),"-")) & 
+                Recommendations$Site %in% unlist(strsplit(as.character(vals_crt_add$Data$Site),"-")))
+    
+    vals4_rp$Data<-data.table(
+      INC_rp=c(vals_crt_add$Data$INC),
+      Site_rp=c(Recommendations_rp$Site),
+      Business_area_rp=c(Recommendations_rp$Business_Area),
+      Process_rp=c(Recommendations_rp$Process),
+      Team_name_rp=c(Recommendations_rp$`Team Name`),
+      Priority_rp=c(Recommendations_rp$`Priority rating`),
+      BG_site_rp=c(Recommendations_rp$`Confirmed BG site synergy`),
+      Third_party_rp=c(Recommendations_rp$`3rd party site synergy`),
+      Timescale_rp=c(''),
+      IVR_messaging=c(''),
+      Online_messaging=c(''),
+      Line_closure=c(''),
+      Line_closed_Free_Text=c(''),
+      Call_routing=c(''),
+      BG_site_rp_new=c(''),
+      Third_Party_new=c(''),
+      Changed_rp=c(''),
+      Is_current_rp=1,
+      Date_time_rp=format(Sys.time(), "%Y%m%d-%H%M%OS")
+    )
+    write.csv(vals4_rp$Data, file = paste0("Data_site_RP/RP_Mydata", format(Sys.time(), "%Y%m%d-%H%M%S"), ".csv"))
+    
+    #Send email for adding new site
+    sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+    recipients <- readRDS("Current_user.Rda") # Replace with one or more valid addresses
+    
+    crt_site_add<-subset(vals_crt_add$Data,select=-c(Systems_other,Facilities_other))
+    
+    # Convert the data frame into an HTML Table
+    y <- htmlTable(crt_site_add, rnames = FALSE)
+    
+    # Define body of email
+    html_body <- paste0("<html><head>
+                        <style>
+                        body{font-family:BG Flame, sans-serif;}
+                        table{border-left:1px solid #000000;border-top:1px solid #000000;width: 1000px;}
+                        table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        img {width: 1000px;}
+                        </style>
+                        </head><body><table>
+                        <tr><td><img src='https://azsu-p-app-026.azure.uk.centricaplc.com:3939/content/179/_w_a9641ffb/heading_bar.png'/></td></tr>
+                        <tr><td><h2 style='font-family:BG Flame; background-color:#00BFFF; width:1000px'>Site Added to the Incident</h2>
+                        <b>Site Impacted: </b>",paste0(vals_crt_add$Data$Site,collapse="-"),"<br><br>
+                        <b>Business Area Impacted: </b>",paste0(vals_crt_add$Data$Business_area,collapse="-"),"<br><br>
+                        <b>Process Area Impacted: </b>",paste0(vals_crt_add$Data$Process,collapse="-"),"<br><br>
+                        <b>Business Area Impacted: </b>",paste0(vals_crt_add$Data$Business_area,collapse="-"),"<br><br>
+                        <b>Teams Impacted: </b>",paste0(vals_crt_add$Data$Teams,collapse="-"),"<br><br>
+                        <b>Incident Description: </b>",paste0(vals_crt_add$Data$Description,collapse="-"),"<br><br>
+                        <b>Last update to the incident: </b>",y,"</td></tr>
+                        </table></body></html>")
+    
+    email_site_add <- send.mail(from = sender,
+                                to = recipients,
+                                subject="New Site Added",
+                                body = html_body,
+                                smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+                                authenticate = FALSE,
+                                html = TRUE,
+                                send = FALSE)
+    email_site_add$send()
+    
+    
+    
+    
+    output$tempSite_crt_add<-renderUI({
+      fluidPage(
+        tags$script(HTML('$(document).on("click", "input", function () {
+                         var checkboxes = document.getElementsByName("row_selected");
+                         var checkboxesChecked = [];
+                         for (var i=0; i<checkboxes.length; i++) {
+                         if (checkboxes[i].checked) {
+                         checkboxesChecked.push(checkboxes[i].value);
+                         }
+                         }
+                         Shiny.onInputChange("checked_rows",checkboxesChecked);
+          })')),
+        tags$script("$(document).on('click', '#Main_table button', function () {
+                        Shiny.onInputChange('lastClickId',this.id);
+                        Shiny.onInputChange('lastClick', Math.random())
+          });"))
+    })
+    
+    this_inc<-vals_crt_add$Data$INC
+    sendSweetAlert(
+      session = session,
+      title = "Success !!",
+      text = paste("Site added for Incident number ",this_inc," !"),
+      type = "success"
+    )
+    
+    #Reset everything to original Null state
+    vals_crt_add$Data<-data.table(
+      INC=c(''),
+      Site=c(''),
+      Business_area=c(''),
+      Process=c(''),
+      Description=c(''),
+      Teams=c(''),
+      People=c(''),
+      Customer_contact=c(''),
+      Systems=c(''),
+      Systems_other=c(''),
+      Facilities=c(''),
+      Facilities_other=c(''),
+      Vulnurable_customers=c('')
+    )
+    
+    #output$tempSite_crt_add<-renderUI(uiOutput("tempSite_add"))
+    output$tempSite_add<-renderUI({
+      fluidPage(
+        
+        tags$script(HTML('$(document).on("click", "input", function () {
+                         var checkboxes = document.getElementsByName("row_selected");
+                         var checkboxesChecked = [];
+                         for (var i=0; i<checkboxes.length; i++) {
+                         if (checkboxes[i].checked) {
+                         checkboxesChecked.push(checkboxes[i].value);
+                         }
+                         }
+                         Shiny.onInputChange("checked_rows",checkboxesChecked);
+    })')),
+        tags$script("$(document).on('click', '#Main_table_crt_add button', function () {
+                    Shiny.onInputChange('lastClickId',this.id);
+                    Shiny.onInputChange('lastClick', Math.random())
+  });"))})
+    
+
+   crt_data$Data<-loadData_crt_site()
+    
+    shinyjs::reset("add_site_form")
+    shinyjs::reset("CRT_mod_pg")
+  })
+  
+  
+################## Amend CRT Site    ################
+  vals2<-reactiveValues()
+  vals2$Data<-data.table(
+    INC=c(NA),
+    Site=c(''),
+    Business_area=c(''),
+    Process=c(''),
+    Description=c(''),
+    Teams=c(''),
+    People=c(''),
+    Customer_contact=c(''),
+    Systems=c(''),
+    Systems_other=c(''),
+    Facilities=c(''),
+    Facilities_other=c(''),
+    Vulnurable_customers=c(''),
+    Changed=c('')
+    
+  )
+  
+  observeEvent(input$CRT_mod_inc,{
+    req(input$CRT_mod_inc)
+    
+    vals2$Data<-data.table(
+      INC=c(NA),
+      Site=c(''),
+      Business_area=c(''),
+      Process=c(''),
+      Description=c(''),
+      Teams=c(''),
+      People=c(''),
+      Customer_contact=c(''),
+      Systems=c(''),
+      Systems_other=c(''),
+      Facilities=c(''),
+      Facilities_other=c(''),
+      Vulnurable_customers=c(''),
+      Changed=c('')
+      
+    )
+    
+    All_data_mod_CRT<-loadData_crt_site()
+    All_data_mod_CRT<-sqldf(paste0("select * from All_data_mod_CRT where INC = '",input$CRT_mod_inc,"' and is_current==",1))
+    All_data_mod_CRT<-sqldf(paste0("select INC,Site,Business_area,Process,Description,Teams,People,Customer_contact,Systems,Systems_other,
+                                   Facilities,Facilities_other,Vulnurable_customers from All_data_mod_CRT "))
+    vals2$Data<-rbind(All_data_mod_CRT,vals2$Data,fill=TRUE)
+    vals2$Data<-subset(vals2$Data,Site!="")
+    updateSwitchInput(session,inputId = "Vulnurable_customers_amend", value=All_data_mod_CRT$Vulnurable_customers)
+    
+    
+    all_data_crt_comms <-loadData_crt_comms()
+    all_data_crt_comms<-sqldf(paste0("select * from all_data_crt_comms where INC = '",input$CRT_mod_inc,"' and is_current=",1))
+    
+    updateSwitchInput(session,inputId = "comm_req_amend_com", value =all_data_crt_comms$Comms_required)
+    updateTextInput(session,inputId = "inc_no_amend_com", value =all_data_crt_comms$Incident_number)
+    updateSwitchInput(session,inputId = "head_comm_amend_com", value=all_data_crt_comms$SLT)
+    updateSwitchInput(session,inputId = "imt_amend_com", value=all_data_crt_comms$IMT)
+    updateSwitchInput(session,inputId = "people_comms_amend_com", value=all_data_crt_comms$People_comms)
+    updateSwitchInput(session,inputId = "operations_invok_amend_com", value=all_data_crt_comms$Operations_invoked)
+
+    
+    all_data_crt_ops <-loadData_crt_ops()
+    all_data_crt_ops<-sqldf(paste0("select * from all_data_crt_ops where INC = '",input$CRT_mod_inc,"' and is_current=",1))
+    
+    updateSwitchInput(session,inputId ="operational_call_amend_ops", value = all_data_crt_ops$Operational_call)
+    updateDateInput(session,inputId ="enter_date_ops", value = all_data_crt_ops$Date_op)
+    updateTimeInput(session,inputId ="enter_time_ops", value = all_data_crt_ops$Time_op1)
+  }
+  )
+  
+  output$CRT_inc_det<-DT::renderDataTable({
+    req(input$CRT_mod_inc)
+    All_data_mod_CRT<-loadData_crt_site()
+    All_data_mod_CRT<-sqldf(paste0("select * from All_data_mod_CRT where INC = '",input$CRT_mod_inc,"' and is_current==",1))
+    All_data_mod_CRT<-sqldf(paste0("select INC,Site,Business_area,Process,Description,Teams,People,Customer_contact,Systems,Facilities,Vulnurable_customers from All_data_mod_CRT "))
+    
+    datatable(All_data_mod_CRT,options = list(dom = 't',scrollX=TRUE),rownames = FALSE,escape=F)}
+  )
+  
+  output$CRT_mod_inc_det<-DT::renderDataTable({
+    req(input$CRT_mod_inc)
+    DT= subset(vals2$Data,select=-c(Systems_other,Facilities_other))
+    DT[["Actions"]]<-
+      paste0('
+                <div class="btn-group" role="group" aria-label="Basic example">
+                <button type="button" class="btn btn-secondary modify"id=modify_crt_',1:nrow(vals2$Data),'>Modify</button>
+                </div>
+                ')
+    DT<-DT %>% select(Actions,everything())
+    datatable(DT,options = list(dom = 't',scrollX=TRUE),rownames = FALSE,
+              escape=F)}
+  )
+  
+  #Disable CRT_changes button if selections have not been made
+  observe({
+    mandatoryFilled <-
+      vapply(fieldsMandatory_amend_site,
+             function(x) {
+               !is.null(input[[x]]) && input[[x]] != ""
+             },
+             logical(1))
+    mandatoryFilled <- all(mandatoryFilled)
+    shinyjs::toggleState(id = "CRT_changes", condition = mandatoryFilled)
+  })  
+  
+  #other fac req- amend site
+  observeEvent(input$facilities_amend,{
+    if ('Other' %in% input$facilities_amend==TRUE){
+      shinyjs::show("other_fac_amend")}
+    else {
+      shinyjs::hide("other_fac_amend")
+    }
+  })
+  
+  #other fac req- amend site
+  observeEvent(input$systems_amend,{
+    if ('Other' %in% input$systems_amend==TRUE){
+      shinyjs::show("other_system_amend")}
+    else {
+      shinyjs::hide("other_system_amend")
+    }
+  })
+  
+  #Pop-up box for Inputs
+  observeEvent(input$lastClick,
+               {
+                 if (input$lastClickId%like%"modify_crt")
+                 {
+                   selected_row=as.numeric(gsub("modify_crt_","",input$lastClickId))
+                   old_row=vals2$Data[selected_row]
+                   
+                   my_input_crt<-reactive(fluidPage(
+                     h3(strong("Edit Existing Site Details"),align="center"),
+                     hr(),
+                     
+                     fluidRow(column(6,paste0("INC: ",old_row$INC)),
+
+                     column(6,paste0("Site: ",old_row$Site))),
+
+                     fluidRow(column(6,paste0("Business area: ",old_row$Business_area)),
+
+                     column(6,paste0("Process area: ",old_row$Process))),
+                      hr(),
+                     fluidRow(column(6,textAreaInput("desc_amend","Description:",value=old_row$Description,height = 200,width=550))),
+
+
+                     fluidRow(column(12,h3("Edit engagement:"))),
+                     fluidRow(column(12,awesomeCheckboxGroup("Teams_amend","Teams:",c("Site", "Resource & Planning", "National resilience"),
+                                                           selected = unlist(strsplit(as.character(old_row$Teams),"-")),inline = TRUE))),
+                     
+                     hr(),
+                     fluidRow(column(12,h3("Edit impact of the incident:"))),
+                     fluidRow(column(12,textInput("People_amend","People (Volume)",value=old_row$People))),
+                     fluidRow(column(6,awesomeCheckboxGroup(
+                       inputId = "cust_cont_amend",
+                       label = "Customer contact",
+                       choices = c("Inbound","Outbound", "Webchat", "Social Media",'Email','Other'),
+                       selected = unlist(strsplit(as.character( old_row$Customer_contact),"-")))),
+
+                       column(6,fluidRow(column(12,awesomeCheckboxGroup(
+                         inputId = "systems_amend",
+                         label = "Systems",
+                         choices = c('No systems impacted',"BG Online", "Agent Workbench", "Trilliant Phase 3 Head End","SMART PAYGE",'BGSM Metering Application',
+                                     'Engineer Workbench','WMIS','MVW/GVW','BGR & BGS SAP CRM','BGR & BGS Billing SAP','Call Delivery (shared)',
+                                     'SMART Industry Integration Hub','Taskforce','Other'),
+                         selected =  unlist(strsplit(as.character(old_row$Systems),"-"))
+                       ))),
+                       fluidRow(column(12,textInput("other_system_amend","Enter other system",
+                                                    value=old_row$Systems_other
+                       ))))),
+                     fluidRow(column(6,fluidRow(column(12,awesomeCheckboxGroup(
+                       inputId = "facilities_amend",
+                       label = "Facilities",
+                       choices = c('No facilities impacted',"Fire Evacuation", "Electricity outage", "Catering issues",'Water supply issues','Ice / snow on walkways and carparks',
+                                   'Damage to the building','Safety / Security alarm malfunctions','Gas explosion / escape','Bomb threat / security alert',
+                                   'Flooding','Other'),
+                       selected =  unlist(strsplit(as.character(old_row$Facilities),"-"))
+                     ))),
+                     fluidRow(column(12,textInput("other_fac_amend","Enter other facility",
+                                                  value=old_row$Facilities_other
+                     )))),
+                     column(6,
+                            selectInput("Vulnurable_customers_amend","Vulnurable customers",c(TRUE,FALSE),selected = old_row$Vulnurable_customers))),
+
+                     actionBttn(
+                       inputId = "CRT_changes",
+                       label = "Save changes",
+                       style = "unite",
+                       color = "primary"),
+                     
+                     tags$script(HTML("$(document).on('click', '#save_changes', function () {
+                                      var list_value=[]
+                                      for (i = 0; i < $( '.new_input' ).length; i++)
+                                      {
+                                      list_value.push($( '.new_input' )[i].value)
+                                      }
+                                      Shiny.onInputChange('newValue', list_value)
+                 });"))
+                   )
+                   )
+                   
+                   showModal(modalDialog(my_input_crt(),easyClose=TRUE) )
+                   x<-old_row$INC
+                 }})
+
+  
+  observeEvent(input$CRT_changes,{
+    selected_row=as.numeric(gsub("modify_crt_","",input$lastClickId))
+    old_row=vals2$Data[selected_row]
+
+    vals2$Data[selected_row]<-data.table(
+      INC=c(old_row$INC),
+      Site=c(old_row$Site),
+      Business_area=c(old_row$Business_area),
+      Process=c(old_row$Process),
+      Description=c(input$desc_amend),
+      Teams=c(paste0(input$Teams_amend,collapse="-")),
+      People=c(input$People_amend),
+      Customer_contact=c(paste0(input$cust_cont_amend,collapse="-")),
+
+      Systems=c(ifelse('Other' %in% input$systems_amend==TRUE,paste(append(input$systems_amend,input$other_system_amend),collapse="-"),paste(input$systems_amend,collapse="-"))),
+      Systems_other=c(ifelse('Other' %in% input$systems_amend==TRUE,paste(input$other_system_amend),c(''))),
+      
+      Facilities=c(ifelse('Other' %in% input$facilities_amend==TRUE,paste(append(input$facilities_amend,input$other_fac_amend),collapse="-"),paste(input$facilities_amend,collapse="-"))),
+      Facilities_other=c(ifelse('Other' %in% input$facilities_amend==TRUE,paste(input$other_fac_amend),c(''))),
+      
+      Vulnurable_customers=c(input$Vulnurable_customers_amend),
+      Changed=c('Yes')
+    )
+
+    removeModal()
+  })
+  
+  # #Ask for short description of the changes made by the user
+  # observeEvent(input$Confirm_CRT_mod,{
+  #   req(input$CRT_mod_inc)
+  #   
+  #   changes_details_crt<-reactive(fluidPage(
+  #     h3(strong("Please give a short description of the changes"),align="center"),
+  #     hr(),
+  #     fluidRow(column(6,textAreaInput("changes_desc_crt","Desciption: ",width = 200))),
+  #     hr(),
+  #     actionButton("CRT_changes_final","Submit")))
+  #   showModal(modalDialog(changes_details_crt(),easyClose=TRUE) )
+  # })
+  
+  observeEvent(input$CRT_changes_final,{
+    req(input$CRT_mod_inc)
+    removeModal()
+    
+    All_data_mod_CRT<-loadData_crt_site()
+    All_data_mod_CRT<-sqldf(paste0("select * from All_data_mod_CRT where INC = '",input$CRT_mod_inc,"' and is_current==",1))
+    All_data_mod_CRT<-sqldf(paste0("select INC, Site, Business_area, Process, Description, Teams, People, Customer_contact, Systems, Systems_other,
+                                   Facilities, Facilities_other, Vulnurable_customers, Date_time, User  from All_data_mod_CRT "))
+    
+    #Set the is_current flag to 0 for the older entries
+    temp_data<-vals2$Data
+    vals2$Data<-sqldf("select * from temp_data where Changed='Yes'")
+    temp_data<-vals2$Data
+    
+    All_data_mod_CRT<-sqldf(paste0("select a.*,case when length(b.Site)>1 then 0 else 1 end as Is_current  from All_data_mod_CRT as a left join temp_data as b on a.Site=b.Site"))
+    
+    old_dttm<-sqldf("select distinct Date_time as Date_time from All_data_mod_CRT ")
+    for (i in unique(old_dttm$Date_time)){
+      test2<-sqldf(paste0("select * from All_data_mod_CRT where Date_time='",i,"'"))
+      write.csv(test2,paste0("Data_crt_site/Mydata_site_",i,".csv"))
+    }
+    
+    #Write the new entries to the data
+    vals2$Data$Date_time<-format(Sys.time(), "%Y%m%d-%H%M%OS")
+    vals2$Data$Is_current<-1
+    #vals2$Data$Change_details_crt<-c(input$changes_desc_crt)
+    vals2$Data$User<-readRDS("Current_user.Rda")
+    write.csv(x = vals2$Data, file = paste0("Data_crt_site/Mydata_site_",format(Sys.time(), "%Y%m%d-%H%M%OS"),".csv"))
+    all_INC_data$Data<-loadData_crt_site()
+    
+    this_inc<-vals2$Data$INC
+    sendSweetAlert(
+      session = session,
+      title = "Success !!",
+      text = paste("Site details amended for Incident Number ",this_inc," !"),
+      type = "success"
+    )
+    
+    #crt_data$Data<- loadData_crt_site()
+    shinyjs::reset("CRT_mod_pg")
+    
+    #Send email for amending CRT details
+    sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+    recipients <- readRDS("Current_user.Rda") # Replace with one or more valid addresses
+    
+    crt_site_amend<-subset(vals2$Data,select=-c(Systems_other,Facilities_other))
+    # Convert the data frame into an HTML Table
+    y <- htmlTable(crt_site_amend, rnames = FALSE)
+    
+    # Define body of email
+    html_body <- paste0("<html><head>
+                        <style>
+                        body{font-family:BG Flame, sans-serif;}
+                        table{border-left:1px solid #000000;border-top:1px solid #000000;width: 1000px;}
+                        table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        img {width: 1000px;}
+                        </style>
+                        </head><body><table>
+                        <tr><td><img src='https://azsu-p-app-026.azure.uk.centricaplc.com:3939/content/179/_w_a9641ffb/heading_bar.png'/></td></tr>
+                        <tr><td><h2 style='font-family:BG Flame; background-color:#00BFFF; width:1000px'>Site Details Amended</h2>
+                        <b>Site Impacted: </b>",paste0(vals2$Data$Site,collapse="-"),"<br><br>
+                        <b>Business Area Impacted: </b>",paste0(vals2$Data$Business_area,collapse="-"),"<br><br>
+                        <b>Process Area Impacted: </b>",paste0(vals2$Data$Process,collapse="-"),"<br><br>
+                        <b>Business Area Impacted: </b>",paste0(vals2$Data$Business_area,collapse="-"),"<br><br>
+                        <b>Teams Impacted: </b>",paste0(vals2$Data$Teams,collapse="-"),"<br><br>
+                        <b>Incident Description: </b>",paste0(vals2$Data$Description,collapse="-"),"<br><br>
+                        <b>Last update to the incident: </b>",y,"</td></tr>
+                        </table></body></html>")
+
+    email_crt <- send.mail(from = sender,
+                           to = recipients,
+                           subject="CRT Details Amended",
+                           body = html_body,
+                           smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+                           authenticate = FALSE,
+                           html = TRUE,
+                           send = FALSE)
+    email_crt$send()
+    
+    crt_data$Data<-loadData_crt_site()
+    
+  })
+  
+
+################## Amend CRT Comms ################
+  
+  #Show details for conn required
+  observeEvent(input$comm_req_amend_com,{
+    if (input$comm_req_amend_com==TRUE){
+      shinyjs::show("comm_requ_details_amend_com")}
+    else if 
+    (input$comm_req_amend_com==FALSE) {
+      shinyjs::hide("comm_requ_details_amend_com")}
+  })
+  
+  observeEvent(input$Refresh_btn,{
+    updateSelectInput(session,inputId = "CRT_mod_inc",label="Enter incident number:",
+                      choices=c("",unique(all_INC_data$Data$INC)),selected="")
+  })
+  
+  
+  observeEvent(input$CRT_changes_final_amend_com,{
+    req(input$CRT_mod_inc)
+    #load old row for coms and change is current to 0 and save
+    all_data_crt_comms <-loadData_crt_comms()
+    all_data_crt_comms<-sqldf(paste0("select * from all_data_crt_comms where INC = '",input$CRT_mod_inc,"' and is_current=",1))
+    
+    # if (length(all_data_crt_comms$is_current)>=1) { 
+    all_data_crt_comms$Is_current <- c(0)
+    write.csv(all_data_crt_comms, file = paste0("Data_crt_comms/Mydata_comms_", all_data_crt_comms$Date_time, ".csv"),row.names = FALSE)
+    
+    crt_comms<-data.table(
+      INC=input$CRT_mod_inc,
+      Comms_required=c(input$comm_req_amend_com),
+      Incident_number=ifelse(input$comm_req_amend_com==FALSE,c(''),c(input$inc_no_amend_com)),
+      SLT=ifelse(input$comm_req_amend_com==FALSE,c(FALSE),c(input$head_comm_amend_com)),
+      IMT=ifelse(input$comm_req_amend_com==FALSE,c(FALSE),c(input$imt_amend_com)),
+      People_comms=ifelse(input$comm_req_amend_com==FALSE,c(FALSE),c(input$people_comms_amend_com)),
+      Operations_invoked=ifelse(input$comm_req_amend_com==FALSE,c(FALSE),c(input$operations_invok_amend_com)),
+      #Changed=c('Yes'),
+      Is_current=c(1),
+      User=readRDS("Current_user.Rda"),
+      Date_time = format(Sys.time(), "%Y%m%d-%H%M%OS"))
+    write_csv(crt_comms,path=paste0("Data_crt_comms/Mydata_comms_",format(Sys.time(), "%Y%m%d-%H%M%OS"),".csv"))
+    
+    #showModal(modalDialog(title = "Amend Comms.","SUCCESS"))
+    this_inc<-input$CRT_mod_inc
+    sendSweetAlert(
+      session = session,
+      title = "Success !!",
+      text = paste("Comms details amended for Incident Number ",this_inc," !"),
+      type = "success"
+    )
+    
+    #Send email for amending CRT details
+    sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+    recipients <- readRDS("Current_user.Rda") # Replace with one or more valid addresses
+    
+    # Convert the data frame into an HTML Table
+    y <- htmlTable(crt_comms, rnames = FALSE)
+    
+    # Define body of email
+    html_body <- paste0("<html><head>
+                        <style>
+                        body{font-family:BG Flame, sans-serif;}
+                        table{border-left:1px solid #000000;border-top:1px solid #000000;width: 1000px;}
+                        table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        img {width: 1000px;}
+                        </style>
+                        </head><body><table>
+                        <tr><td><img src='https://azsu-p-app-026.azure.uk.centricaplc.com:3939/content/179/_w_a9641ffb/heading_bar.png'/></td></tr>
+                        <tr><td><h2 style='font-family:BG Flame; background-color:#00BFFF; width:1000px'>CRT Comms Amended</h2>
+                        <b>INC: </b>",paste0(crt_comms$INC,collapse="-"),"<br><br>
+                        <b>Comms_required: </b>",paste0(crt_comms$Comms_required,collapse="-"),"<br><br>
+                        <b>Incident_number: </b>",paste0(crt_comms$Incident_number),"<br><br>
+                        <b>SLT: </b>",paste0(crt_comms$SLT),"<br><br>
+                        <b>IMT: </b>",paste0(crt_comms$IMT),"<br><br>
+                        <b>People_comms: </b>",paste0(crt_comms$People_comms),"<br><br>
+                        <b>Operations_invoked: </b>",paste0(crt_comms$Operations_invoked),"<br><br>
+                        <b>Last update to the incident: </b>",y,"</td></tr>
+                        </table></body></html>")
+    
+    email_crt_comms <- send.mail(from = sender,
+                                 to = recipients,
+                                 subject="CRT Details Amended",
+                                 body = html_body,
+                                 smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+                                 authenticate = FALSE,
+                                 html = TRUE,
+                                 send = FALSE)
+    email_crt_comms$send()
+    shinyjs::reset("ammend_comms_form")
+    shinyjs::reset("CRT_mod_pg")
+  })
+  
+  
+################## Amend CRT Ops #########################   
+  
+  observeEvent(input$operational_call_amend_ops,{
+    if (input$operational_call_amend_ops==TRUE){
+      shinyjs::show("ops_call_details_ops")}
+    else {
+      #updateTimeInput(session,"enter_time",value="2019-09-09 BST")
+      shinyjs::hide("ops_call_details_ops")
+    }
+  })
+  
+  observeEvent(input$Refresh_btn,{
+    updateSelectInput(session,inputId = "CRT_mod_inc",label="Enter incident number:",
+                      choices=c("",unique(all_INC_data$Data$INC)),selected="")
+  })
+  
+  
+  observeEvent(input$CRT_changes_final_amend_ops,{
+    req(input$CRT_mod_inc)
+    #load old row for coms and change is current to 0 and save
+    all_data_crt_ops <-loadData_crt_ops()
+    all_data_crt_ops<-sqldf(paste0("select * from all_data_crt_ops where INC = '",input$CRT_mod_inc,"' and is_current=",1))
+    
+    # if (length(all_data_crt_comms$is_current)>=1) { 
+    all_data_crt_ops$Is_current <- c(0)
+    write.csv(all_data_crt_ops, file = paste0("Data_crt_ops/Mydata_ops_", all_data_crt_ops$Date_time, ".csv"),row.names = FALSE)
+    #  }
+    
+    crt_ops<-data.table(
+      INC=input$CRT_mod_inc,
+      Operational_call=c(input$operational_call_amend_ops),
+      Date_op=ifelse(input$operational_call_amend_ops=='FALSE',c(''),c(paste(input$enter_date_ops))),
+      Time_op=ifelse(input$operational_call_amend_ops=='FALSE',c(paste(Sys.Date())),c(format(input$enter_time_ops,"%H:%M"))),
+      Time_op1=ifelse(input$operational_call_amend_ops=='FALSE',c(paste(Sys.Date())),c(paste(input$enter_time_ops))),
+      #Changed=c('Yes'),
+      Is_current=c(1),
+      User=readRDS("Current_user.Rda"),
+      Date_time = format(Sys.time(), "%Y%m%d-%H%M%OS"))
+      write_csv(crt_ops,path = paste0("Data_crt_ops/Mydata_ops_",format(Sys.time(), "%Y%m%d-%H%M%OS"),".csv"))
+    
+      #showModal(modalDialog(title = "Amend Ops.","SUCCESS"))
+      this_inc<-input$CRT_mod_inc
+      sendSweetAlert(
+        session = session,
+        title = "Success !!",
+        text = paste("Operations details amended for Incident Number ",this_inc," !"),
+        type = "success"
+      )
+      # shinyjs::reset("CRT_mod_pg")
+      crt_ops1<-data.table(
+        INC=input$CRT_mod_inc,
+        Operational_call=c(input$operational_call_amend_ops),
+        Date_op=ifelse(input$operational_call_amend_ops=='FALSE',c(''),c(paste(input$enter_date_ops))),
+        Time_op=ifelse(input$operational_call_amend_ops=='FALSE',c(''),c(format(input$enter_time_ops,"%H:%M"))),
+        Is_current=c(1),
+        User=readRDS("Current_user.Rda"),
+        Date_time = format(Sys.time(), "%Y%m%d-%H%M%OS"))
+      
+      #Send email for amending CRT details
+      sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+      recipients <- readRDS("Current_user.Rda") # Replace with one or more valid addresses
+      
+      # Convert the data frame into an HTML Table
+      y <- htmlTable(crt_ops1, rnames = FALSE)
+      
+      # Define body of email
+      html_body <- paste0("<html><head>
+                        <style>
+                        body{font-family:BG Flame, sans-serif;}
+                        table{border-left:1px solid #000000;border-top:1px solid #000000;width: 1000px;}
+                        table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        img {width: 1000px;}
+                        </style>
+                        </head><body><table>
+                        <tr><td><img src='https://azsu-p-app-026.azure.uk.centricaplc.com:3939/content/179/_w_a9641ffb/heading_bar.png'/></td></tr>
+                        <tr><td><h2 style='font-family:BG Flame; background-color:#00BFFF; width:1000px'>CRT Ops Amended</h2>
+                        <b>INC: </b>",paste0(crt_ops$INC),"<br><br>
+                        <b>Operational_call: </b>",paste0(crt_ops$Operational_call),"<br><br>
+                        <b>Date_op: </b>",paste0(crt_ops$Date_op),"<br><br>
+                        <b>Time_op: </b>",ifelse(crt_ops$Operational_call=='FALSE',c(''),c(crt_ops$Time_op)),"<br><br>
+                        <b>Date_time: </b>",paste0(crt_ops$Date_time),"<br><br>
+                        <b>Last update to the incident: </b>",y,"</td></tr>
+                        </table></body></html>")
+      
+      email_crt_ops <- send.mail(from = sender,
+                                 to = recipients,
+                                 subject="CRT Details Amended",
+                                 body = html_body,
+                                 smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+                                 authenticate = FALSE,
+                                 html = TRUE,
+                                 send = FALSE)
+      email_crt_ops$send()
+      
+      shinyjs::reset("crt_ops_form")
+      shinyjs::reset("CRT_mod_pg")
+  })
+  
+  
+  
+  ######################## Situation Report- Add or Amend ################################### 
+  
+  observeEvent(input$Refresh_btn_site_rep,{
+    updateSelectInput(session,inputId = "inc_site_rep",label="Enter incident number:",
+                      choices=c("",unique(loadData_crt_site()$INC)),selected="")
+  })
+  
+  
+  #### Disable add button if selections have not been made
+  observe({
+    MandatoryFilled_sit_rep <-
+      vapply(fieldsMandatory_sit_rep,
+             function(x) {
+               ifelse(x=="enter_date_sit",  !is.na(input[[x]]) && input[[x]]!=0 && length(input[[x]]) !=0 , !is.null(input[[x]]) && input[[x]] != "" )
+               #!is.null(input[[x]]) && input[[x]] != "" 
+             },
+             logical(1))
+    MandatoryFilled_sit_rep <- all(MandatoryFilled_sit_rep)
+    
+    #Check if dates have been populated
+   shinyjs::toggleState(id = "add_sit_rep", condition = MandatoryFilled_sit_rep)
+  })
+  
+  ### Disable submit button if no changes have been made
+  observe({
+    req(input$inc_site_rep)
+    MandatoryFilled_sit_rep_modify <- ifelse(nrow(values_sit_rep$Data %>% filter(values_sit_rep$Data$changed_sit_rep == "Yes"))>0,TRUE,FALSE)
+    MandatoryFilled_sit_rep_modify <- all(MandatoryFilled_sit_rep_modify)
+    shinyjs::toggleState(id = "save_sit_rep", condition = MandatoryFilled_sit_rep_modify)
+  })
+  
+  output$Site_rep_inc_det<-DT::renderDataTable({
+    req(input$inc_site_rep)
+    All_data_mod_CRT1<-loadData_crt_site()
+    All_data_mod_CRT1<-sqldf(paste0("select * from All_data_mod_CRT1 where INC = '",input$inc_site_rep,"' and is_current=",1))
+    All_data_mod_CRT1<-sqldf(paste0("select INC,Site,Business_area,Process,Description,Teams,People,Customer_contact,Systems,Facilities,Vulnurable_customers  from All_data_mod_CRT1 "))
+    datatable(All_data_mod_CRT1,options = list(dom = 't',scrollX=TRUE),rownames = FALSE,escape=F)}
+  )
+  
+  values_sit_rep<-reactiveValues()
+  
+  update_site_sit_rep<-function(session){
+    req(input$inc_site_rep)
+    all_sit_rep_data3<-loadData_crt_site()
+    site_filter<-sqldf(paste0("select * from all_sit_rep_data3 where INC = '",input$inc_site_rep,"'"))
+    updatePickerInput(session,inputId = "Site_sit_rep",label="Site :",choices=c("All Sites",unique(site_filter$Site))
+    )}
+  observeEvent(input$inc_site_rep,update_site_sit_rep(session))  
+  
+  # Observe event for change in incident number
+  observeEvent(input$inc_site_rep,{
+    #filter site rep data where is current =1 mydata1
+    all_data_sit_rep1 <-loadData_site_rep()
+    all_data_sit_rep1<-sqldf(paste0("select * from all_data_sit_rep1 where INC_sit_rep = '",input$inc_site_rep,"' and is_current=",1))
+
+    values_sit_rep$Data<-sqldf(paste0("select *,'' as changed_sit_rep,'' as add_flag_sit_rep,'' as amend_flag_sit_rep from all_data_sit_rep1 
+                                      where INC_sit_rep = '",input$inc_site_rep,"' and is_current=",1)) 
+    values_sit_rep$Data<-data.table(values_sit_rep$Data)
+    values_sit_rep$Data <- subset(values_sit_rep$Data,select=c(INC_sit_rep,Chairperson,Date,Time,Summary,Updates,Date_time_si,Site,Owner,Action,
+                                                               Status,Updates2,is_current,Line_number,changed_sit_rep,add_flag_sit_rep,amend_flag_sit_rep))
+    values_sit_rep$Data$changed_sit_rep<-as.character(values_sit_rep$Data$changed_sit_rep) #change abhi
+
+    
+    all_data_sit_rep_latest_dtstamp<-sqldf(paste0("select * from all_data_sit_rep1 where INC_sit_rep = '",input$inc_site_rep,"' and is_current=",1, " order by Date_time_si DESC limit 1"))
+    if (nrow(all_data_sit_rep_latest_dtstamp)==0){
+      updateTextInput(session,inputId = "site_rep_ChairPerson_", value ="")
+      updateDateInput(session,inputId = "enter_date_sit", value=as.Date.character(Sys.Date(),"%Y-%m-%d"))
+      updateTimeInput(session,inputId = "enter_time_sit", value=strptime(x="00:00",format="%H:%M"))
+      updateTextAreaInput(session,inputId = "site_rep_summary_", value="")
+      updateTextAreaInput(session,inputId = "site_rep_updates_", value="")
+    }
+    else {
+      updateTextInput(session,inputId = "site_rep_ChairPerson_", value =all_data_sit_rep_latest_dtstamp$Chairperson)
+      updateDateInput(session,inputId = "enter_date_sit", value=as.Date.character(all_data_sit_rep_latest_dtstamp$Date,"%Y-%m-%d"))
+      updateTimeInput(session,inputId = "enter_time_sit", value=strptime(x=all_data_sit_rep_latest_dtstamp$Time,format="%H:%M"))
+      updateTextAreaInput(session,inputId = "site_rep_summary_", value=all_data_sit_rep_latest_dtstamp$Summary)
+      updateTextAreaInput(session,inputId = "site_rep_updates_", value=all_data_sit_rep_latest_dtstamp$Updates)
+    }
+  })
+  
+  
+  observeEvent(input$add_sit_rep,{
+    req(input$inc_site_rep)
+    
+    All_data_sit_rep3<-loadData_site_rep()
+    All_data_sit_rep4 <- sqldf(paste0("select * from All_data_sit_rep3 where INC_sit_rep = '",input$inc_site_rep,"' and is_current=",1))
+    lat_INC_sit_rep<-ifelse(nrow(All_data_sit_rep4)>=1,max(All_data_sit_rep4$Line_number,na.rm = TRUE),0) #change abhi
+
+   
+    add_sit_rep<-data.table(
+      INC_sit_rep = c(input$inc_site_rep),
+      Chairperson = c(input$site_rep_ChairPerson_),
+      Date = c(format(input$enter_date_sit,"%Y-%m-%d")),
+      Time = c(format(input$enter_time_sit,"%H:%M")),
+      Summary = c(input$site_rep_summary_),
+      Updates = c(input$site_rep_updates_),
+      Date_time_si = format(Sys.time(), "%Y%m%d-%H%M%OS"),
+      Site = c(input$Site_sit_rep),
+      Owner = c(input$site_rep_owner1),
+      Action = c(input$site_rep_action1),
+      Status = c(input$site_rep_summary1),
+      Updates2 = c(input$site_rep_updates1),
+      is_current = c(1),
+      Line_number = max(lat_INC_sit_rep+1,values_sit_rep$Data$Line_number+1),
+      changed_sit_rep=c("Yes"),
+      add_flag_sit_rep=c(1),
+      amend_flag_sit_rep=c(0)
+    )
+
+    
+    
+    values_sit_rep$Data<-rbind(add_sit_rep,values_sit_rep$Data,fill=TRUE)
+    values_sit_rep$Data<-subset(values_sit_rep$Data,Chairperson!="")
+    values_sit_rep$Data$changed_sit_rep<-as.character(values_sit_rep$Data$changed_sit_rep) #change abhi
+
+    shinyjs::reset("sit_rep_form2")
+  })
+  
+  #display details of added situation below
+  output$temp_sit_rep<-renderUI({
+    
+    if (nrow(values_sit_rep$Data)==0) {
+      fluidPage(
+        p("No Sit Reps present for this incident",style="font-family: 'BG Flame';font-weight: bold"))
+    }
+    else {
+    fluidPage(
+      fluidRow(column(11,p("The below situation/s will be added to the incident: ",style="font-family: 'BG Flame';font-weight: bold")),
+               column(1,downloadButton("downloaddata_sit_reps","Download",style="background-color: #4472c4;color:#ffffff"))),
+      hr(),
+      column(12,dataTableOutput("Main_table_sit_rep")),
+      tags$script(HTML('$(document).on("click", "input", function () {
+                         var checkboxes = document.getElementsByName("row_selected");
+                         var checkboxesChecked = [];
+                         for (var i=0; i<checkboxes.length; i++) {
+                         if (checkboxes[i].checked) {
+                         checkboxesChecked.push(checkboxes[i].value);
+                         }
+                         }
+                         Shiny.onInputChange("checked_rows",checkboxesChecked);
+          })')),
+      tags$script("$(document).on('click', '#Main_table_sit_rep button', function () {
+                        Shiny.onInputChange('lastClickId2',this.id);
+                        Shiny.onInputChange('lastClick2', Math.random())
+          });"))}
+  })
+  
+  output$Main_table_sit_rep<-renderDataTable({
+    req(input$inc_site_rep)
+    
+    all_data_sit_rep2 <-values_sit_rep$Data
+    DT_sit_rep=sqldf("select INC_sit_rep, Line_number as Action_number, Site, Owner, Action, Status, Updates2, Chairperson, Date, Time, 
+                      Date_time_si from all_data_sit_rep2")
+    DT_sit_rep[["Actions1"]]<-
+      paste0('
+                <div class="btn-group" role="group" aria-label="Basic example">
+                <button type="button" class="btn btn-secondary modify" id=save_sit_rep_',1:nrow(DT_sit_rep),'>Modify</button>
+                </div>
+                ')
+    DT_sit_rep<-DT_sit_rep %>% select(Actions1,everything())
+    datatable(DT_sit_rep,
+              escape=F,
+              options=list(scrollX=TRUE),
+              rownames=FALSE)})
+  
+  #Download data- sit reps
+  output$downloaddata_sit_reps <- downloadHandler(
+    filename = function() {
+      paste("Sit_Reps for INC",input$inc_site_rep,".csv")
+    },
+    content = function(file) {
+      all_data_sit_rep2 <-values_sit_rep$Data
+      DT_sit_rep=sqldf("select INC_sit_rep, Line_number as Action_number, Site, Owner, Action, Status, Updates2, Chairperson, Date, Time, Summary, Updates, 
+                      Date_time_si from all_data_sit_rep2")
+      write.csv(DT_sit_rep,file, row.names = FALSE)
+    })
+  
+  observeEvent(input$lastClick2,
+               {
+                 if (input$lastClickId2 %like% "m_delete_sit_rep_")
+                 { 
+                   row_to_del=as.numeric(gsub("m_delete_sit_rep_","",input$lastClickId2))
+                   values_sit_rep$Data=values_sit_rep$Data[-row_to_del]
+                 }})
+  
+
+  
+  observeEvent(input$lastClick2,
+               {
+                 req(input$inc_site_rep)
+                 if (input$lastClickId2%like%"save_sit_rep_")
+                 {
+                   site_filter1 <- loadData_crt_site()
+                   site_filter1 <- sqldf(paste0("select * from site_filter1 where INC = '",input$inc_site_rep,"'"))
+   
+                   selected_row=as.numeric(gsub("save_sit_rep_","",input$lastClickId2))
+                   old_row_sit_rep=values_sit_rep$Data[selected_row]
+
+                   my_input_sit_rep<-reactive(fluidPage(
+                     h3(strong("Edit existing sit rep details"),align="center"),
+                     hr(),
+                     fluidRow(column(6,paste0("INC : ",old_row_sit_rep$INC_sit_rep)),
+                              column(6,paste0("Chairperson : ",old_row_sit_rep$Chairperson))),
+                     
+                     fluidRow(column(6,paste0("Date : ",old_row_sit_rep$Date)),
+                              column(6,paste0("Time : ",old_row_sit_rep$Time))),hr(),
+                     
+                     fluidRow(column(12,paste0("Summary : ",value=old_row_sit_rep$Summary))),hr(),
+                     fluidRow(column(6,paste0("Updates : ",value=old_row_sit_rep$Updates))),hr(),
+                     
+                     fluidRow(column(6,paste0("Site : ",value=old_row_sit_rep$Site)),
+                              column(6,paste0("Action : ",value=old_row_sit_rep$Action))),hr(),
+                     
+                     fluidRow(column(12,textInput("Owner_mod_sit_rep"," Owner:",value = old_row_sit_rep$Owner))),
+                     
+                     
+                     fluidRow(column(12,pickerInput("Status_mod_sit_rep"," Status:",c("","Closed","Open","In Progress"),selected=old_row_sit_rep$Status))),
+                     fluidRow(column(12,textAreaInput("Updates2_mod_sit_rep","Updates2 :",value=old_row_sit_rep$Updates2,height=200,width = 550))),
+                     
+
+                     actionBttn(
+                       inputId = "Sit_Rep_changes",
+                       label = "Save changes",
+                       style = "unite",
+                       color = "primary"),
+                     
+                     tags$script(HTML("$(document).on('click', '#save_changes', function () {
+                                      var list_value=[]
+                                      for (i = 0; i < $( '.new_input' ).length; i++)
+                                      {
+                                      list_value.push($( '.new_input' )[i].value)
+                                      }
+                                      Shiny.onInputChange('newValue', list_value)
+                 });"))
+                   )
+                   )
+                   showModal(modalDialog(my_input_sit_rep(),easyClose=TRUE) )
+                   X<-old_row_sit_rep$INC_sit_rep
+                 }
+               })
+  
+  observeEvent(input$Sit_Rep_changes,{
+    selected_row=as.numeric(gsub("save_sit_rep_","",input$lastClickId2))
+    old_row_sit_rep=values_sit_rep$Data[selected_row]
+    
+    test_a<-data.table(
+      INC_sit_rep = c(old_row_sit_rep$INC_sit_rep ),
+      Chairperson = c(old_row_sit_rep$Chairperson),
+      Date = c(old_row_sit_rep$Date),
+      Time = c(old_row_sit_rep$Time),
+      Summary = c(old_row_sit_rep$Summary),
+      Updates = c(old_row_sit_rep$Updates),
+      Date_time_si = format(Sys.time(), "%Y%m%d-%H%M%OS"),
+      Site = c(old_row_sit_rep$Site),
+      Owner = c(input$Owner_mod_sit_rep),
+      Action = c(old_row_sit_rep$Action),
+      Status = c(input$Status_mod_sit_rep),
+      Updates2 = c(input$Updates2_mod_sit_rep),
+      is_current = c(1),
+      Line_number = c(old_row_sit_rep$Line_number ), #change abhi
+      changed_sit_rep = c('Yes'),
+      add_flag_sit_rep=c(0),
+      amend_flag_sit_rep=c(1)
+    )
+
+    values_sit_rep$Data[selected_row]<-test_a
+    removeModal()
+  })
+  
+  # #Ask for short description of the changes made by the user
+  # observeEvent(input$save_sit_rep,{
+  #   req(input$inc_site_rep)
+  #   
+  #   changes_details_sit_rep<-reactive(fluidPage(
+  #     h3(strong("Please give a short description of the changes"),align="center"),
+  #     hr(),
+  #     fluidRow(column(6,textAreaInput("changes_sit_rep","Desciption: ",width = 200))),
+  #     hr(),
+  #     actionButton("Sit_rep_changes_final","Submit")))
+  #   showModal(modalDialog(changes_details_sit_rep(),easyClose=TRUE) )
+  # })
+  # 
+  observeEvent(input$save_sit_rep,{
+    req(input$inc_site_rep)
+    
+    test<-values_sit_rep$Data
+    add_sit_rep1<-sqldf("select * from test where changed_sit_rep='Yes'")
+
+    All_data_mod_sit_rep<-loadData_site_rep()
+    All_data_mod_sit_rep<-sqldf(paste0("select * from All_data_mod_sit_rep where INC_sit_rep = '",input$inc_site_rep,"' and is_current==1"))
+
+    #amend
+    add_sit_rep2<-sqldf("select * from add_sit_rep1 where amend_flag_sit_rep=1 and add_flag_sit_rep=0")
+    if (nrow(add_sit_rep2)>0) {
+      for (i in 1:nrow(add_sit_rep2)) {
+        line_no<-add_sit_rep2[i,c('Line_number')]
+
+        old_sit_rep<-sqldf(paste0("select * from All_data_mod_sit_rep where Line_number=",line_no))
+        
+        if (nrow(old_sit_rep)<1){
+          for (i in 1:nrow(add_sit_rep2)){
+            write.csv(add_sit_rep2[i,], file = paste0("Data_sit_rep/Sit_rep_Mydata",add_sit_rep2[i,c('Date_time_si')] , ".csv"))
+          }
+        }
+        else{
+        old_sit_rep$is_current<-0
+        write.csv(old_sit_rep, file = paste0("Data_sit_rep/Sit_rep_Mydata", old_sit_rep$Date_time_si, ".csv"),row.names = FALSE)
+
+        new_sit_rep<-sqldf(paste0("select INC_sit_rep, Chairperson, Date, Time, Summary, Updates, Date_time_si, Site, Owner, Action, Status, Updates2,
+                              is_current, Line_number from add_sit_rep2 where Line_number=",line_no))
+        new_sit_rep$User<-readRDS("Current_user.Rda")
+        write.csv(new_sit_rep, file = paste0("Data_sit_rep/Sit_rep_Mydata", new_sit_rep$Date_time_si, ".csv"),row.names = FALSE)
+        }}
+       }
+
+     #add and add/amend
+      add_sit_rep3<-sqldf("select * from add_sit_rep1 where add_flag_sit_rep=1 and amend_flag_sit_rep=0")
+      if (nrow(add_sit_rep3)>0) {
+      for (i in 1:nrow(add_sit_rep3)){
+        add_sit_rep3$User<-readRDS("Current_user.Rda")
+        write.csv(add_sit_rep3[i,], file = paste0("Data_sit_rep/Sit_rep_Mydata",add_sit_rep3[i,c('Date_time_si')] , ".csv"))
+      }
+    }
+
+      #Send email for add sit rep details
+      sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+      recipients <- readRDS("Current_user.Rda") # Replace with one or more valid addresses
+
+      # Convert the data frame into an HTML Table
+      y <- htmlTable(add_sit_rep1, rnames = FALSE)
+
+      # Define body of email
+      html_body <- paste0("<html><head>
+                        <style>
+                        body{font-family:BG Flame, sans-serif;}
+                        table{border-left:1px solid #000000;border-top:1px solid #000000;width: 1000px;}
+                        table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        img {width: 1000px;}
+                        </style>
+                        </head><body><table>
+                        <tr><td><img src='https://azsu-p-app-026.azure.uk.centricaplc.com:3939/content/179/_w_a9641ffb/heading_bar.png'/></td></tr>
+                        <tr><td><h2 style='font-family:BG Flame; background-color:#00BFFF; width:1000px'>Situation Report Added</h2>
+                        <b>INC: </b>",paste0(add_sit_rep1$INC_sit_rep,collapse="-"),"<br><br>
+                        <b>Chairperson: </b>",paste0(add_sit_rep1$Chairperson,collapse="-"),"<br><br>
+                        <b>Date: </b>",paste0(add_sit_rep1$Date,collapse="-"),"<br><br>
+                        <b>Time: </b>",paste0(add_sit_rep1$Time,collapse="-"),"<br><br>
+                        <b>Summary: </b>",paste0(add_sit_rep1$Summary,collapse="-"),"<br><br>
+                        <b>Updates: </b>",paste0(add_sit_rep1$Updates,collapse="-"),"<br><br>
+                        <b>Date_time_si: </b>",paste0(add_sit_rep1$Date_time_si,collapse="-"),"<br><br>
+                        <b>Site: </b>",paste0(add_sit_rep1$Site,collapse="-"),"<br><br>
+                        <b>Owner: </b>",paste0(add_sit_rep1$Owner,collapse="-"),"<br><br>
+                        <b>Action: </b>",paste0(add_sit_rep1$Action,collapse="-"),"<br><br>
+                        <b>Status: </b>",paste0(add_sit_rep1$Status,collapse="-"),"<br><br>
+                        <b>Updates2: </b>",paste0(add_sit_rep1$Updates2,collapse="-"),"<br><br>
+
+                        <b>Last update to the incident: </b>",y,"</td></tr>
+                        </table></body></html>")
+
+      email_sit_rep <- send.mail(from = sender,
+                                 to = recipients,
+                                 subject="Sit Reps Added",
+                                 body = html_body,
+                                 smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+                                 authenticate = FALSE,
+                                 html = TRUE,
+                                 send = FALSE)
+      email_sit_rep$send()
+
+      shinyjs::reset("sit_rep_form1")
+      shinyjs::reset("sit_rep_form2")
+      shinyjs::reset("sit_rep_form3")
+
+      sendSweetAlert(
+        session = session,
+        title = "Success !!",
+        text = paste("Actions Added"),
+        type = "success"
+      )
+    })
+    
+    # if (nrow(values_sit_rep$Data %>% filter(values_sit_rep$Data$add_flag_sit_rep == 1))>0 & 
+    #   nrow(values_sit_rep$Data %>% filter(values_sit_rep$Data$amend_flag_sit_rep == 1))>0) {  #add and modify
+    #   
+    #   
+    #   
+    #   
+    #   
+    #   
+    # }
+    # 
+    # #add only
+    # else if (nrow(values_sit_rep$Data %>% filter(values_sit_rep$Data$amend_flag_sit_rep == 1))>0) {  
+    # 
+    #   test<-values_sit_rep$Data
+    #   add_sit_rep1<-sqldf("select INC_sit_rep, Chairperson, Date, Time, Summary, Updates, Date_time_si, Site, Owner, Action, Status, Updates2, is_current, Line_number
+    #                        from test where changed_sit_rep='Yes'")
+    #   
+    #   #save multiple files as per their date-time
+    #   for (i in 1:nrow(add_sit_rep1)){
+    #     #add_sit_rep1[i,c('Line_number')]<-add_sit_rep1[1,c('Line_number')]+i-1
+    #     write.csv(add_sit_rep1[i,], file = paste0("Data_sit_rep/Sit_rep_Mydata",add_sit_rep1[i,c('Date_time_si')] , ".csv"))
+    #   }
+    #   
+    # 
+    #   #Send email for add sit rep details
+    #   sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+    #   recipients <- readRDS("Current_user.Rda") # Replace with one or more valid addresses
+    #   
+    #   # Convert the data frame into an HTML Table
+    #   y <- htmlTable(add_sit_rep1, rnames = FALSE)
+    #   
+    #   # Define body of email
+    #   html_body <- paste0("<html><head>
+    #                     <style>
+    #                     body{font-family:BG Flame, sans-serif;}
+    #                     table{border-left:1px solid #000000;border-top:1px solid #000000;width: 1000px;}
+    #                     table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+    #                     table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+    #                     img {width: 1000px;}
+    #                     </style>
+    #                     </head><body><table>
+    #                     <tr><td><img src='https://azsu-p-app-026.azure.uk.centricaplc.com:3939/content/179/_w_a9641ffb/heading_bar.png'/></td></tr>
+    #                     <tr><td><h2 style='font-family:BG Flame; background-color:#00BFFF; width:1000px'>Situation Report Added</h2>
+    #                     <b>INC: </b>",paste0(add_sit_rep1$INC_sit_rep,collapse="-"),"<br><br>
+    #                     <b>Chairperson: </b>",paste0(add_sit_rep1$Chairperson,collapse="-"),"<br><br>
+    #                     <b>Date: </b>",paste0(add_sit_rep1$Date,collapse="-"),"<br><br>
+    #                     <b>Time: </b>",paste0(add_sit_rep1$Time,collapse="-"),"<br><br>
+    #                     <b>Summary: </b>",paste0(add_sit_rep1$Summary,collapse="-"),"<br><br>
+    #                     <b>Updates: </b>",paste0(add_sit_rep1$Updates,collapse="-"),"<br><br>
+    #                     <b>Date_time_si: </b>",paste0(add_sit_rep1$Date_time_si,collapse="-"),"<br><br>
+    #                     <b>Site: </b>",paste0(add_sit_rep1$Site,collapse="-"),"<br><br>
+    #                     <b>Owner: </b>",paste0(add_sit_rep1$Owner,collapse="-"),"<br><br>
+    #                     <b>Action: </b>",paste0(add_sit_rep1$Action,collapse="-"),"<br><br>
+    #                     <b>Status: </b>",paste0(add_sit_rep1$Status,collapse="-"),"<br><br>
+    #                     <b>Updates2: </b>",paste0(add_sit_rep1$Updates2,collapse="-"),"<br><br>
+    #                    
+    #                     <b>Last update to the incident: </b>",y,"</td></tr>
+    #                     </table></body></html>")
+    #   
+    #   email_sit_rep <- send.mail(from = sender,
+    #                              to = recipients,
+    #                              subject="Sit Reps Added",
+    #                              body = html_body,
+    #                              smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+    #                              authenticate = FALSE,
+    #                              html = TRUE,
+    #                              send = FALSE)
+    #   email_sit_rep$send()
+    #   
+    #   shinyjs::reset("sit_rep_form1")
+    #   shinyjs::reset("sit_rep_form2")
+    #   shinyjs::reset("sit_rep_form3")
+    #   
+    #   sendSweetAlert(
+    #     session = session,
+    #     title = "Success !!",
+    #     text = paste("Actions Added"),
+    #     type = "success"
+    #   )
+    # }
+    # 
+    # #amend only
+    # else { 
+    # 
+    # All_data_mod_sit_rep<-loadData_site_rep()
+    # All_data_mod_sit_rep<-sqldf(paste0("select * from All_data_mod_sit_rep where INC_sit_rep = '",input$inc_site_rep,"' and is_current==1"))
+    # 
+    # temp_data_sit_rep<-values_sit_rep$Data
+    # values_sit_rep$Data<-sqldf("select * from temp_data_sit_rep where changed_sit_rep='Yes'")
+    # temp_data_sit_rep<-values_sit_rep$Data
+    # 
+    # for (i in 1:nrow(temp_data_sit_rep)) {
+    # line_no<-temp_data_sit_rep[i,c('Line_number')]
+    # 
+    # old_sit_rep<-sqldf(paste0("select * from All_data_mod_sit_rep where INC_sit_rep = '",input$inc_site_rep,"' and is_current=1 and Line_number=",line_no))
+    # old_sit_rep$is_current<-0
+    # 
+    # write.csv(old_sit_rep, file = paste0("Data_sit_rep/Sit_rep_Mydata", old_sit_rep$Date_time_si, ".csv"),row.names = FALSE)
+    # 
+    # new_sit_rep<-sqldf(paste0("select INC_sit_rep, Chairperson, Date, Time, Summary, Updates, Date_time_si, Site, Owner, Action, Status, Updates2,
+    #                           is_current, Line_number from temp_data_sit_rep where Line_number=",line_no))
+    # write.csv(new_sit_rep, file = paste0("Data_sit_rep/Sit_rep_Mydata", new_sit_rep$Date_time_si, ".csv"),row.names = FALSE)
+    # }
+    # 
+    # shinyjs::reset("sit_rep_form1")
+    # shinyjs::reset("sit_rep_form2")
+    # shinyjs::reset("sit_rep_form3")
+    # 
+    # sendSweetAlert(
+    #   session = session,
+    #   title = "Success !!",
+    #   text = paste("Actions Modified"),
+    #   type = "success"
+    # )
+    # 
+    # #Send email for add sit rep details
+    # sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+    # recipients <- readRDS("Current_user.Rda") # Replace with one or more valid addresses
+    # 
+    # # Convert the data frame into an HTML Table
+    # y <- htmlTable(temp_data_sit_rep, rnames = FALSE)
+    # 
+    # # Define body of email
+    # html_body <- paste0("<html><head>
+    #                     <style>
+    #                     body{font-family:BG Flame, sans-serif;}
+    #                     table{border-left:1px solid #000000;border-top:1px solid #000000;width: 1000px;}
+    #                     table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+    #                     table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+    #                     img {width: 1000px;}
+    #                     </style>
+    #                     </head><body><table>
+    #                     <tr><td><img src='https://azsu-p-app-026.azure.uk.centricaplc.com:3939/content/179/_w_a9641ffb/heading_bar.png'/></td></tr>
+    #                     <tr><td><h2 style='font-family:BG Flame; background-color:#00BFFF; width:1000px'>Situation Report Modified</h2>
+    #                     <b>INC: </b>",paste0(temp_data_sit_rep$INC_sit_rep,collapse="-"),"<br><br>
+    #                     <b>Chairperson: </b>",paste0(temp_data_sit_rep$Chairperson,collapse="-"),"<br><br>
+    #                     <b>Date: </b>",paste0(temp_data_sit_rep$Date,collapse="-"),"<br><br>
+    #                     <b>Time: </b>",paste0(temp_data_sit_rep$Time,collapse="-"),"<br><br>
+    #                     <b>Summary: </b>",paste0(temp_data_sit_rep$Summary,collapse="-"),"<br><br>
+    #                     <b>Updates: </b>",paste0(temp_data_sit_rep$Updates,collapse="-"),"<br><br>
+    #                     <b>Date_time_si: </b>",paste0(temp_data_sit_rep$Date_time_si,collapse="-"),"<br><br>
+    #                     <b>Site: </b>",paste0(temp_data_sit_rep$Site,collapse="-"),"<br><br>
+    #                     <b>Owner: </b>",paste0(temp_data_sit_rep$Owner,collapse="-"),"<br><br>
+    #                     <b>Action: </b>",paste0(temp_data_sit_rep$Action,collapse="-"),"<br><br>
+    #                     <b>Status: </b>",paste0(temp_data_sit_rep$Status,collapse="-"),"<br><br>
+    #                     <b>Updates2: </b>",paste0(temp_data_sit_rep$Updates2,collapse="-"),"<br><br>
+    # 
+    #                     <b>Last update to the incident: </b>",y,"</td></tr>
+    #                     </table></body></html>")
+    # 
+    # email_sit_rep_modify <- send.mail(from = sender,
+    #                                   to = recipients,
+    #                                   subject="Sit Reps Modified",
+    #                                   body = html_body,
+    #                                   smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+    #                                   authenticate = FALSE,
+    #                                   html = TRUE,
+    #                                   send = FALSE)
+    # email_sit_rep_modify$send()}
+    
+  
+  #########################  Amend Site IMT  ################################
+  
+  vals2_imt<-reactiveValues()
+  
+  vals2_imt$Data<-data.table(
+    INC=c(NA),
+    Site=c(NA),
+    Who_is_impacted=c(''),
+    Estimated_volume_of_users_impacted=c(''),
+    Root_cause=c(''),
+    Timescales_for_recovery=c(''),
+    IMT=c(''),
+    Comms=c(''),
+    Site_continuity=c(''),
+    Description=c(''),
+    Changed_imt=c(''),
+    Is_current_imt=c(''),
+    Date_time_imt=c('')
+  )
+  
+  observeEvent(input$IMT_mod_inc,{
+    req(input$IMT_mod_inc)
+    
+    vals2_imt$Data<-data.table(
+      INC=c(NA),
+      Site=c(NA),
+      Who_is_impacted=c(''),
+      Estimated_volume_of_users_impacted=c(''),
+      Root_cause=c(''),
+      Timescales_for_recovery=c(''),
+      IMT=c(''),
+      Comms=c(''),
+      Site_continuity=c(''),
+      Description=c(''),
+      Changed_imt=c(''),
+      Is_current_imt=c(''),
+      Date_time_imt=c('')
+    )
+    All_data_mod_IMT<-loadData_site_imt()
+    write.csv(All_data_mod_IMT,"test.csv")
+    All_data_mod_IMT<-sqldf(paste0("select * from All_data_mod_IMT where INC ='",input$IMT_mod_inc,"' and Is_current_imt=",1))
+    All_data_mod_IMT<-sqldf(paste0("select INC,Site,Who_is_impacted,Estimated_volume_of_users_impacted,Root_cause,Timescales_for_recovery,IMT,
+                                        Comms,Site_continuity,Description  from All_data_mod_IMT"))
+    vals2_imt$Data<-rbind(All_data_mod_IMT,vals2_imt$Data,fill=TRUE)
+    vals2_imt$Data<-subset(vals2_imt$Data,Site!="")})
+  
+  
+  observeEvent(input$Refresh_btn_site_imt,{
+    updateSelectInput(session,inputId = "IMT_mod_inc",label="Enter incident number:",
+                      choices=c("",unique(all_INC_data$Data$INC)),selected="")
+  })
+  
+  
+  #view IMT details
+  output$CRT_inc_det1<-DT::renderDataTable({
+    req(input$IMT_mod_inc)
+    All_data_mod_CRT_1<-loadData_crt_site()
+    All_data_mod_CRT_1<-sqldf(paste0("select * from All_data_mod_CRT_1 where INC = '",input$IMT_mod_inc,"' and is_current==",1))
+    All_data_mod_CRT_1<-sqldf(paste0("select INC,Site,Business_area,Process,Description,Teams,People,Customer_contact,Systems,Facilities,Vulnurable_customers from All_data_mod_CRT_1 "))
+    
+    datatable(All_data_mod_CRT_1,options = list(dom = 't',scrollX=TRUE),rownames = FALSE,escape=F)}
+  )
+  
+  
+  
+  #Disable IMT_changes button if selections have not been made
+  observe({
+    mandatoryFilled_site_imt <-
+      vapply(fieldsMandatory_site_imt,
+             function(x) {
+               !is.null(input[[x]]) && input[[x]] != ""
+             },
+             logical(1))
+    mandatoryFilled_site_imt <- all(mandatoryFilled_site_imt)
+    shinyjs::toggleState(id = "IMT_changes", condition = mandatoryFilled_site_imt)
+  })  
+  
+
+  ### Disable submit button if no changes have been made
+  observe({
+    req(input$IMT_mod_inc)
+    MandatoryFilled_imt_modify <- ifelse(nrow(vals2_imt$Data %>% filter(vals2_imt$Data$Changed_imt == "Yes"))>0,TRUE,FALSE)
+    MandatoryFilled_imt_modify <- all(MandatoryFilled_imt_modify)
+    shinyjs::toggleState(id = "Confirm_IMT_mod", condition = MandatoryFilled_imt_modify)
+  })
+  
+  #Amend IMT details
+  output$IMT_mod_inc_det<-DT::renderDataTable({
+    req(input$IMT_mod_inc)
+    DT_IMT<-vals2_imt$Data[,-c("Changed_imt","Is_current_imt","Date_time_imt")]
+    DT_IMT[["Actions"]]<-
+      paste0('
+                <div class="btn-group" role="group" aria-label="Basic example">
+                <button type="button" class="btn btn-secondary modify" id=modify_imt_',1:nrow(vals2_imt$Data),'>Update</button>
+                </div>
+                ')
+    DT_IMT<-DT_IMT %>% select(Actions,everything())
+    datatable(DT_IMT,options = list(dom = 't',scrollX=TRUE),rownames = FALSE,
+              escape=F)}
+  )
+  
+  
+  observeEvent(input$lastClick,
+               {
+                 if (input$lastClickId%like%"modify_imt_")
+                 {
+                   selected_row=as.numeric(gsub("modify_imt_","",input$lastClickId))
+                   old_row_imt=vals2_imt$Data[selected_row]
+                   
+                   my_input_imt<-reactive(fluidPage(
+                     h3(strong("Edit Existing Site Details"),align="center"),
+                     hr(),
+                     fluidRow(column(6,paste0("INC : ",old_row_imt$INC)),
+                              column(6,paste0("Site : ",old_row_imt$Site))),
+                     hr(),
+                     fluidRow(column(6,
+                                     awesomeCheckboxGroup(
+                                       inputId = "Who_is_impacted",
+                                       label = "Who is impacted",
+                                       choices = c("People","Engineers","Others"),inline = TRUE, 
+                                       selected =  unlist(strsplit(as.character(old_row_imt$Who_is_impacted),"-"))
+                                     ))),
+                     hr(),
+                     fluidRow(column(6,numericInput("Estimated_volume_of_users_impacted","Estimated volume of users impacted ",value =old_row_imt$Estimated_volume_of_users_impacted ))),
+                     fluidRow(column(6,textAreaInput("Root_cause","Root Cause",value=old_row_imt$Root_cause,height=200,width = 550))),
+                     #hr(),
+                     fluidRow(column(6,pickerInput(
+                       inputId = "Timescales_for_recovery",
+                       label = "Timescales for Recovery",
+                       choices = c('','0-1 hrs','2-4 hrs',' 4-6 hrs','6+ hrs'),selected=old_row_imt$Timescales_for_recovery)),
+                       column(6,pickerInput(
+                         inputId = "IMT",
+                         label = "IMT",
+                         choices = c('','Informed','Not Informed','Stood Up'),selected=old_row_imt$IMT))),
+                     hr(),
+                     fluidRow(column(6,pickerInput(
+                       inputId = "Comms",
+                       label = "Comms",
+                       choices = c('','Yes','No','Not currently necesaary'),selected=old_row_imt$Comms),
+                     ),
+                        column(6,awesomeCheckboxGroup(
+                                       inputId = "Site_continuity",
+                                       label = "Site Continuity",
+                                       choices = c("TL Cascade","Site Informed","Employee line updated ","On standby","Invoked","N/A"),
+                                       selected =  unlist(strsplit(as.character(old_row_imt$Site_continuity),"-"))
+                                       # status = "success"
+                                     ))),
+                     hr(),
+                     fluidRow(column(6,textAreaInput("Description","Description: ",value =old_row_imt$Description,height = 200,width=550))),
+                     
+                     hr(),
+                     
+                     actionBttn(
+                       inputId = "IMT_changes",
+                       label = "Save changes",
+                       style = "unite",
+                       color = "primary"),
+                     
+                     tags$script(HTML("$(document).on('click', '#save_changes', function () {
+                                      var list_value=[]
+                                      for (i = 0; i < $( '.new_input' ).length; i++)
+                                      {
+                                      list_value.push($( '.new_input' )[i].value)
+                                      }
+                                      Shiny.onInputChange('newValue', list_value)
+                 });"))
+                   )
+                   )
+                   showModal(modalDialog(my_input_imt(),easyClose=TRUE) )
+                   X<-old_row_imt$INC
+                 }
+               })
+  
+  observeEvent(input$IMT_changes,{
+    selected_row=as.numeric(gsub("modify_imt_","",input$lastClickId))
+    old_row_imt=vals2_imt$Data[selected_row]
+    
+    vals2_imt$Data[selected_row]<-data.table(
+      INC=c(old_row_imt$INC),
+      Site=c(old_row_imt$Site),
+      Who_is_impacted=c(paste0(input$Who_is_impacted,collapse = "-")),
+      Estimated_volume_of_users_impacted=c(input$Estimated_volume_of_users_impacted),
+      Root_cause=c(input$Root_cause),
+      Timescales_for_recovery=c( input$Timescales_for_recovery),
+      IMT=c(input$IMT),
+      Comms=c(input$Comms),
+      Site_continuity=c(paste0(input$Site_continuity,collapse = "-")),
+      Description=c(input$Description),
+      Changed_imt=c('Yes'),
+      Is_current_imt=c(''),
+      Date_time_imt=c(''))
+    
+    removeModal()
+  })
+  
+  # Ask for short description of the changes made by the user
+  observeEvent(input$Confirm_IMT_mod,{
+    req(input$IMT_mod_inc)
+    
+    All_data_mod_IMT<-loadData_site_imt()
+    All_data_mod_IMT<-sqldf(paste0("select * from All_data_mod_IMT where INC = '",input$IMT_mod_inc,"' and Is_current_imt==1"))
+    All_data_mod_IMT<-sqldf(paste0("select INC,Site,Who_is_impacted,Estimated_volume_of_users_impacted,Root_cause,Timescales_for_recovery,IMT,
+                                   Comms,Site_continuity,Description,Date_time_imt  from All_data_mod_IMT"))
+    
+    temp_data_imt<-vals2_imt$Data
+    vals2_imt$Data<-sqldf("select * from temp_data_imt where Changed_imt='Yes'")
+    temp_data_imt<-vals2_imt$Data
+    All_data_mod_IMT<-sqldf(paste0("select a.*,case when length(b.Site)>1 then 0 else 1 end as Is_current_imt  from All_data_mod_IMT as a left join temp_data_imt as b on a.Site=b.Site"))
+    
+    old_dttm_imt<-sqldf("select distinct Date_time_imt from All_data_mod_IMT ")
+    #old entries
+    for (i in unique(old_dttm_imt$Date_time_imt)){
+      test2<-sqldf(paste0("select * from All_data_mod_IMT where Date_time_imt='",i,"'"))
+      write_csv(test2,paste0("Data_site_IMT/IMT_Mydata",i,".csv"))
+    }
+    
+    #Write the new entries to the data
+    vals2_imt$Data$Date_time_imt<-format(Sys.time(), "%Y%m%d-%H%M%OS")
+    vals2_imt$Data$Is_current_imt<-1
+    # vals2_imt$Data$Change_details_imt<-c(input$changes_desc_imt)
+    vals2_imt$Data$User<-readRDS("Current_user.Rda")
+    write.csv(x = vals2_imt$Data, file = paste0("Data_site_IMT/IMT_Mydata",format(Sys.time(), "%Y%m%d-%H%M%OS"),".csv"))
+    
+    shinyjs::reset("IMT_mod_pg")
+    
+    sendSweetAlert(
+      session = session,
+      title = "Success !!",
+      text = paste("Site Details Modified"),
+      type = "success"
+    )
+    
+    #Send email for amending Site IMT details
+    sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+    recipients <- readRDS("Current_user.Rda") # Replace with one or more valid addresses
+    
+    # Convert the data frame into an HTML Table
+    y <- htmlTable(vals2_imt$Data, rnames = FALSE)
+    
+    # Define body of email
+    html_body <- paste0("<html><head>
+                        <style>
+                        body{font-family:BG Flame, sans-serif;}
+                        table{border-left:1px solid #000000;border-top:1px solid #000000;width: 1000px;}
+                        table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        img {width: 1000px;}
+                        </style>
+                        </head><body><table>
+                        <tr><td><img src='https://azsu-p-app-026.azure.uk.centricaplc.com:3939/content/179/_w_a9641ffb/heading_bar.png'/></td></tr>
+                        <tr><td><h2 style='font-family:BG Flame; background-color:#00BFFF; width:1000px'>Site IMT Modified</h2>
+                        <b>INC: </b>",paste0(vals2_imt$Data$INC,collapse="-"),"<br><br>
+                        <b>Site: </b>",paste0(vals2_imt$Data$Site,collapse="-"),"<br><br>
+                        <b>Who is impacted: </b>",paste0(vals2_imt$Data$Who_is_impacted,collapse="-"),"<br><br>
+                        <b>Estimated volume of users impacted: </b>",paste0(vals2_imt$Data$Estimated_volume_of_users_impacted,collapse="-"),"<br><br>
+                        <b>Root cause: </b>",paste0(vals2_imt$Data$Root_cause,collapse="-"),"<br><br>
+                        <b>Timescales for recovery: </b>",paste0(vals2_imt$Data$Timescales_for_recovery,collapse="-"),"<br><br>
+                        <b>IMT: </b>",paste0(vals2_imt$Data$IMT,collapse="-"),"<br><br>
+                        <b>Comms: </b>",paste0(vals2_imt$Data$Comms,collapse="-"),"<br><br>
+                        <b>Site continuity: </b>",paste0(vals2_imt$Data$Site_continuity,collapse="-"),"<br><br>
+                        <b>Description: </b>",paste0(vals2_imt$Data$Description,collapse="-"),"<br><br>
+                       
+
+                        <b>Last update to the incident: </b>",y,"</td></tr>
+                        </table></body></html>")
+    
+    
+    email_imt <- send.mail(from = sender,
+                           to = recipients,
+                           subject="IMT Details Amended",
+                           body = html_body,
+                           smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+                           authenticate = FALSE,
+                           html = TRUE,
+                           send = FALSE)
+    email_imt$send()
+    
+    imt_data$Data<-loadData_site_imt()
+  })
+  
+  
+  ########################## Amend Site NR ################################
+  
+  vals3_nr<-reactiveValues()
+  vals3_nr$Data<-data.table(
+    INC=c(NA),
+    Site=c(NA),
+    Action_required=c(''),
+    Sungard_required=c(''),
+    Sungard_available=c(''),
+    Sungard_accessible=c(''),
+    Escalation_required=c(''),
+    Escalated_to=c(''),
+    Comments=c(''),
+    Changed_nr=c(''),
+    Is_current_nr=c(''),
+    Date_time_nr=c('')
+    
+  )
+  
+  observeEvent(input$NR_mod_inc,{
+    req(input$NR_mod_inc)
+    
+    vals3_nr$Data<-data.table(
+      INC=c(NA),
+      Site=c(NA),
+      Action_required=c(''),
+      Sungard_required=c(''),
+      Sungard_available=c(''),
+      Sungard_accessible=c(''),
+      Escalation_required=c(''),
+      Escalated_to=c(''),
+      Comments=c(''),
+      Changed_nr=c(''),
+      Is_current_nr=c(''),
+      Date_time_nr=c('')
+      
+    )
+    All_data_mod_NR<-loadData_site_nr()
+    All_data_mod_NR<-sqldf(paste0("select * from All_data_mod_NR where INC ='",input$NR_mod_inc,"' and Is_current_nr=",1))
+    All_data_mod_NR<-sqldf(paste0("select INC,Site,Action_required,Sungard_required,Sungard_available,
+                                  Sungard_accessible,Escalation_required,Escalated_to,Comments from All_data_mod_NR"))
+    
+    vals3_nr$Data<-rbind(All_data_mod_NR,vals3_nr$Data,fill=TRUE)
+    vals3_nr$Data<-subset(vals3_nr$Data,Site!="")})
+  
+  
+  observeEvent(input$Refresh_btn_nr,{
+    updateSelectInput(session,inputId = "NR_mod_inc",label="Enter Incident number",
+                      choices=c("",unique(all_INC_data$Data$INC)),selected="")
+
+  })
+  
+  #view NR details
+  output$CRT_inc_det2<-DT::renderDataTable({
+    req(input$NR_mod_inc)
+    All_data_mod_CRT<-loadData_crt_site()
+    All_data_mod_CRT<-sqldf(paste0("select * from All_data_mod_CRT where INC = '",input$NR_mod_inc,"' and is_current==",1))
+    All_data_mod_CRT<-sqldf(paste0("select INC,Site,Business_area,Process,Description,Teams,People,Customer_contact,Systems,Facilities,Vulnurable_customers from All_data_mod_CRT "))
+    
+    datatable(All_data_mod_CRT,options = list(dom = 't',scrollX=TRUE),rownames = FALSE,escape=F)}
+  )
+  
+  
+  #Disable NR_changes button if selections have not been made
+  observe({
+    mandatoryFilled_site_nr <-
+      vapply(fieldsMandatory_site_nr,
+             function(x) {
+               !is.null(input[[x]]) && input[[x]] != ""
+             },
+             logical(1))
+    mandatoryFilled_site_nr <- all(mandatoryFilled_site_nr)
+    shinyjs::toggleState(id = "NR_changes", condition = mandatoryFilled_site_nr)
+  })  
+
+  
+  ### Disable submit button if no changes have been made
+  observe({
+    req(input$NR_mod_inc)
+    MandatoryFilled_nr_modify <- ifelse(nrow(vals3_nr$Data %>% filter(vals3_nr$Data$Changed_nr == "Yes"))>0,TRUE,FALSE)
+    MandatoryFilled_nr_modify <- all(MandatoryFilled_nr_modify)
+    shinyjs::toggleState(id = "Confirm_NR_mod", condition = MandatoryFilled_nr_modify)
+  })
+  
+  
+  
+  #Amend NR details
+  output$NR_mod_inc_det<-DT::renderDataTable({
+    req(input$NR_mod_inc)
+    DT_NR<-vals3_nr$Data[,-c("Changed_nr","Is_current_nr","Date_time_nr")]
+    
+    DT_NR[["Actions"]]<-
+      paste0('
+                <div class="btn-group" role="group" aria-label="Basic example">
+                <button type="button" class="btn btn-secondary modify" id=modify_nr_',1:nrow(vals3_nr$Data),'>Modify</button>
+                </div>
+                ')
+    DT_NR<-DT_NR %>% select(Actions,everything())
+    datatable(DT_NR,options = list(dom = 't',scrollX=TRUE),rownames = FALSE,
+              escape=F)}
+  )
+  
+  observeEvent(input$lastClick,
+               {
+                 if (input$lastClickId%like%"modify_nr_")
+                 {
+                   selected_row=as.numeric(gsub("modify_nr_","",input$lastClickId))
+                   old_row_nr=vals3_nr$Data[selected_row]
+                   
+                   my_input_nr<-reactive(fluidPage(
+                     h3(strong("Edit Existing NR Details"),align="center"),
+                     hr(),
+                     fluidRow(column(6,paste0("INC : ",old_row_nr$INC)),
+                              column(6,paste0("Site : ",old_row_nr$Site))),
+                     
+                     hr(),
+                     fluidRow(column(6,selectInput("Action_required","Actions Required:",c("",unique(form_options$Options)),selected=old_row_nr$Action_required)),
+                              column(6,selectInput("Sungard_required","Sungard Required:",c("","Yes","No","On Standby"),selected=old_row_nr$Sungard_required))),
+                     
+                     fluidRow(column(6,selectInput("Sungard_available","Sungard available:",c("","Yes","No"),selected=old_row_nr$Sungard_available)),
+                              column(6,selectInput("Sungard_accessible","Sungard accessible:",c("","Yes","No"),selected=old_row_nr$Sungard_accessible))),
+                     
+                     hr(),
+                     fluidRow(column(3,selectInput("Escalation_required","Escalation Required:",c("","Yes","No"),selected=old_row_nr$Escalation_required))),
+                     fluidRow(column(3, textAreaInput("Escalated_to", "Escalated to:",value =old_row_nr$Escalated_to, height =200,width = 550))),
+                     
+                     
+                     
+                     fluidRow(column(12,textAreaInput("Comments", "Updates/Comments",value =old_row_nr$Comments, height =200,width = 550))),
+                     
+
+                     actionBttn(
+                       inputId = "NR_changes",
+                       label = "Save changes",
+                       style = "unite",
+                       color = "primary"),
+                     
+                     tags$script(HTML("$(document).on('click', '#save_changes', function () {
+                                      var list_value=[]
+                                      for (i = 0; i < $( '.new_input' ).length; i++)
+                                      {
+                                      list_value.push($( '.new_input' )[i].value)
+                                      }
+                                      Shiny.onInputChange('newValue', list_value)
+                 });"))
+                   )
+                   )
+                   showModal(modalDialog(my_input_nr(),easyClose=TRUE) )
+                   X<-old_row_nr$INC_nr
+                 }
+               })
+  
+  
+  
+  observeEvent(input$Sungard_required,{
+    if (input$Sungard_required=="Yes"){
+      shinyjs::show("Sungard_available")
+      shinyjs::show("Sungard_accessible")
+      
+    }
+    else {
+      shinyjs::hide("Sungard_available")
+      shinyjs::hide("Sungard_accessible")
+      updateTextInput(session, "Sungard_available","Sungard available:", "")
+      updateTextInput(session, "Sungard_accessible","Sungard accessible:", "")
+      
+    }
+  })
+  
+  
+  observeEvent(input$Escalation_required,{
+    if (input$Escalation_required=="Yes"){
+      shinyjs::show("Escalated_to")
+      
+    }
+    else {
+      shinyjs::hide("Escalated_to")
+      
+      updateTextInput(session, "Escalated_to","Escalated to:", "")
+      updateTextInput(session, "Comments","Updates/Comments", "")
+      
+    }
+  })
+  
+  # updateTextInput(session, "Comments","Updates/Comments", "")
+  
+  
+  observeEvent(input$NR_changes,{
+    selected_row=as.numeric(gsub("modify_nr_","",input$lastClickId))
+    old_row_nr=vals3_nr$Data[selected_row]
+    
+    vals3_nr$Data[selected_row]<-data.table(
+      INC=c(old_row_nr$INC),
+      Site=c(old_row_nr$Site),
+      Action_required=c(input$Action_required),
+      Sungard_required=c(input$Sungard_required),
+      Sungard_available=c(input$Sungard_available),
+      Sungard_accessible=c(input$Sungard_accessible),
+      Escalation_required=c(input$Escalation_required),
+      Escalated_to=c(input$Escalated_to),
+      Comments=c(input$Comments),
+      Changed_nr=c('Yes'),
+      Is_current_nr=c(''),
+      Date_time_nr=c('')
+    )
+    removeModal()
+  })
+  
+  #Ask for short description of the changes made by the user
+  observeEvent(input$Confirm_NR_mod,{
+    req(input$NR_mod_inc)
+    
+    #   changes_details_nr<-reactive(fluidPage(
+    #     h3(strong("Please give a short description of the changes"),align="center"),
+    #     hr(),
+    #     fluidRow(column(6,textAreaInput("changes_desc_nr","Desciption: ",width = 200))),
+    #     hr(),
+    #     actionButton("NR_changes_final","Submit")))
+    #   showModal(modalDialog(changes_details_nr(),easyClose=TRUE) )
+    # })
+    # 
+    # observeEvent(input$NR_changes_final,{
+    #   req(input$NR_mod_inc) 
+    #   removeModal()
+    
+    All_data_mod_NR<-loadData_site_nr()
+    All_data_mod_NR<-sqldf(paste0("select * from All_data_mod_NR where INC = '",input$NR_mod_inc,"' and Is_current_nr==1"))
+    All_data_mod_NR<-sqldf(paste0("select INC,Site,Action_required,Sungard_required,Sungard_available,
+                                  Sungard_accessible,Escalation_required,Escalated_to,Comments,Date_time_nr  from All_data_mod_NR "))
+    
+    temp_data_nr<-vals3_nr$Data
+    vals3_nr$Data<-sqldf("select * from temp_data_nr where Changed_nr='Yes'")
+    temp_data_nr<-vals3_nr$Data
+    All_data_mod_NR<-sqldf(paste0("select a.*,case when length(b.Site)>1 then 0 else 1 end as Is_current_nr  from All_data_mod_NR as a left join temp_data_nr as b on a.Site=b.Site"))
+    
+    old_dttm_nr<-sqldf("select distinct Date_time_nr from All_data_mod_NR ")
+    #old entries
+    for (i in unique(old_dttm_nr$Date_time_nr)){
+      test2<-sqldf(paste0("select * from All_data_mod_NR where Date_time_nr='",i,"'"))
+      write_csv(test2,paste0("Data_site_NR/NR_Mydata",i,".csv"))
+    }
+    
+    #Write the new entries to the data
+    vals3_nr$Data$Date_time_nr<-format(Sys.time(), "%Y%m%d-%H%M%OS")
+    vals3_nr$Data$Is_current_nr<-1
+    vals3_nr$Data$Change_details_nr<-c(input$changes_desc_nr)
+    vals3_nr$Data$User<-readRDS("Current_user.Rda")
+    write.csv(x = vals3_nr$Data, file = paste0("Data_site_NR/NR_Mydata",format(Sys.time(), "%Y%m%d-%H%M%OS"),".csv"))
+    
+    shinyjs::reset("NR_mod_pg")
+    
+    sendSweetAlert(
+      session = session,
+      title = "Success !!",
+      text = paste("NR Details Modified"),
+      type = "success"
+    )
+    
+    #Send email for amending Site IMT details
+    sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+    recipients <- readRDS("Current_user.Rda") # Replace with one or more valid addresses
+    
+    # Convert the data frame into an HTML Table
+    y <- htmlTable(vals3_nr$Data, rnames = FALSE)
+    
+    # Define body of email
+    html_body <- paste0("<html><head>
+                        <style>
+                        body{font-family:BG Flame, sans-serif;}
+                        table{border-left:1px solid #000000;border-top:1px solid #000000;width: 1000px;}
+                        table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                        img {width: 1000px;}
+                        </style>
+                        </head><body><table>
+                        <tr><td><img src='https://azsu-p-app-026.azure.uk.centricaplc.com:3939/content/179/_w_a9641ffb/heading_bar.png'/></td></tr>
+                        <tr><td><h2 style='font-family:BG Flame; background-color:#00BFFF; width:1000px'>Site NR Modified</h2>
+                        <b>INC: </b>",paste0(vals3_nr$Data$INC,collapse="-"),"<br><br>
+                        <b>Site: </b>",paste0(vals3_nr$Data$Site,collapse="-"),"<br><br>
+                        <b>Action required: </b>",paste0(vals3_nr$Data$Action_required,collapse="-"),"<br><br>
+                        <b>Sungard required: </b>",paste0(vals3_nr$Data$Sungard_required,collapse="-"),"<br><br>
+                        <b>Sungard available: </b>",paste0(vals3_nr$Data$Sungard_available,collapse="-"),"<br><br>
+                        <b>Sungard accessible: </b>",paste0(vals3_nr$Data$Sungard_accessible,collapse="-"),"<br><br>
+                        <b>Escalation required: </b>",paste0(vals3_nr$Data$Escalation_required,collapse="-"),"<br><br>
+                        <b>Escalated to: </b>",paste0(vals3_nr$Data$Escalated_to,collapse="-"),"<br><br>
+                        <b>Comments: </b>",paste0(vals3_nr$Data$Comments,collapse="-"),"<br><br>
+
+
+
+                        <b>Last update to the incident: </b>",y,"</td></tr>
+                        </table></body></html>")
+    
+    
+    email_imt <- send.mail(from = sender,
+                           to = recipients,
+                           subject="NR Details Amended",
+                           body = html_body,
+                           smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+                           authenticate = FALSE,
+                           html = TRUE,
+                           send = FALSE)
+    email_imt$send()
+    
+    nr_data$Data<-loadData_site_nr()
+  })
+  
+  ######################## Amend Site RP ###################################  
+  
+  vals4_rp<-reactiveValues()
+  
+  vals4_rp$Data<-data.table(
+    INC_rp=c(NA),
+    Site_rp=c(NA),
+    Business_area_rp=c(''),
+    Process_rp=c(''),
+    Team_name_rp=c(''),
+    Priority_rp=c(''),
+    BG_site_rp=c(''),
+    Third_party_rp=c(''),
+    Timescale_rp=c(''),
+    IVR_messaging=c(''),
+    Online_messaging=c(''),
+    Line_closure=c(''),
+    Line_closed_Free_Text=c(''),
+    Call_routing=c(''),
+    BG_site_rp_new=c(''),
+    Third_Party_new=c(''),
+    Changed_rp=c(''),
+    Is_current_rp=c(''),
+    Date_time_rp=c('')
+  )
+  
+  observeEvent(input$RP_mod_inc,{
+    req(input$RP_mod_inc)
+    
+    vals4_rp$Data<-data.table(
+      INC_rp=c(NA),
+      Site_rp=c(NA),
+      Business_area_rp=c(''),
+      Process_rp=c(''),
+      Team_name_rp=c(''),
+      Priority_rp=c(''),
+      BG_site_rp=c(''),
+      Third_party_rp=c(''),
+      Timescale_rp=c(''),
+      IVR_messaging=c(''),
+      Online_messaging=c(''),
+      Line_closure=c(''),
+      Line_closed_Free_Text=c(''),
+      Call_routing=c(''),
+      BG_site_rp_new=c(''),
+      Third_Party_new=c(''),
+      Changed_rp=c(''),
+      Is_current_rp=c(''),
+      Date_time_rp=c('')
+    )
+    All_data_mod_RP<-loadData_site_rp()
+    All_data_mod_RP<-sqldf(paste0("select * from All_data_mod_RP where INC_rp ='",input$RP_mod_inc,"' and Is_current_rp=",1))
+    All_data_mod_RP<-sqldf(paste0("select INC_rp,Site_rp,Business_area_rp,Process_rp, Team_name_rp, Priority_rp, BG_site_rp,
+                                   Third_party_rp,Timescale_rp, IVR_messaging,Online_messaging,
+                                   Line_closure,Line_closed_Free_Text,Call_routing,BG_site_rp_new,
+                                   Third_Party_new  from All_data_mod_RP"))
+    vals4_rp$Data<-rbind(All_data_mod_RP,vals4_rp$Data,fill=TRUE)
+    vals4_rp$Data<-subset(vals4_rp$Data,Site_rp!="")})
+  
+  
+  observeEvent(input$Refresh_btn_site_rp,{
+    updateSelectInput(session,inputId = "RP_mod_inc",label="Enter incident number:",
+                      choices=c("",unique(all_INC_data$Data$INC)),selected="")
+  })
+  
+  
+  #view RP detailsS
+  output$RP_inc_det<-DT::renderDataTable({
+    req(input$RP_mod_inc)
+    All_data_mod_RP<-loadData_site_rp()
+    All_data_mod_RP<-sqldf(paste0("select * from All_data_mod_RP where INC_rp ='",input$RP_mod_inc,"' and Is_current_rp=",1))
+    All_data_mod_RP<-sqldf(paste0("select INC_rp,Site_rp,Business_area_rp,Process_rp, Team_name_rp, Priority_rp, BG_site_rp,
+                                   Third_party_rp,Timescale_rp, IVR_messaging,Online_messaging,
+                                   Line_closure,Line_closed_Free_Text,Call_routing,BG_site_rp_new,
+                                   Third_Party_new  from All_data_mod_RP"))
+    datatable(All_data_mod_RP,options = list(dom = 't',scrollX=TRUE),rownames = FALSE,
+              escape=F)}
+  )
+  
+  
+  #Amend RP details
+  output$RP_mod_inc_det<-DT::renderDataTable({
+    req(input$RP_mod_inc)
+    DT_RP<-vals4_rp$Data[,-c("Changed_rp","Is_current_rp","Date_time_rp")]
+    
+    DT_RP[["Actions"]]<-
+      paste0('
+                <div class="btn-group" role="group" aria-label="Basic example">
+                <button type="button" class="btn btn-secondary modify" id=modify_rp_',1:nrow(vals4_rp$Data),'>Modify</button>
+                </div>
+                ')
+    DT_RP<-DT_RP %>% select(Actions,everything())
+    datatable(DT_RP,options = list(dom = 't',scrollX=TRUE),rownames = FALSE,
+              escape=F)}
+  )
+  
+  
+  observeEvent(input$lastClick,
+               {
+                 if (input$lastClickId%like%"modify_rp_")
+                 {
+                   selected_row=as.numeric(gsub("modify_rp_","",input$lastClickId))
+                   old_row_rp=vals4_rp$Data[selected_row]
+                   
+                   my_input_rp<-reactive(fluidPage(
+                     h3(strong("Edit existing site RP details"),align="center"),
+                     hr(),
+                     fluidRow(column(6,paste0("INC : ",old_row_rp$INC_rp)),
+                              column(6,paste0("Site : ",old_row_rp$Site_rp))),
+                     hr(),
+                     fluidRow(column(6,paste0("Business area : ",old_row_rp$Business_area_rp)),
+                              column(6,paste0("Process : ",old_row_rp$Process_rp))),
+                     hr(),
+                     fluidRow(column(6,paste0("Team name : ",old_row_rp$Team_name_rp)),
+                              column(6,paste0("Priority : ",old_row_rp$Priority_rp))),
+                     hr(),
+                     fluidRow(column(6,paste0("BG site : ",old_row_rp$BG_site_rp)),
+                              column(6,paste0("Third party : ",old_row_rp$Third_party_rp))),
+                     hr(),
+                     fluidRow(column(6,selectInput("Timescale_rp","Timescale: ",c("", unique(timescale_meta$Options)),selected=old_row_rp$Timescale_rp))),
+                     hr(),
+                     fluidRow(column(6,selectInput("IVR_messaging","IVR messaging:",c("",unique(options_rp_nr$IVR_messaging)),selected=old_row_rp$IVR_messaging)),
+                              column(6,selectInput("Online_messaging","Online messaging:",c("","Online messaging"),selected=old_row_rp$Online_messaging))),
+                     hr(),
+                     fluidRow(column(6,selectInput("Line_closure","Line closure:",c("",unique(options_rp_nr$line_closure)),selected=old_row_rp$Line_closure)),
+                              column(6,textInput("Line_closed_Free_Text","Line closed Free Text:"))),
+                     hr(),
+                     fluidRow(column(6,selectInput("Call_routing","Call routing:",c("",unique(options_rp_nr$call_routing)),selected=old_row_rp$Call_routing)),
+                              column(6,selectInput("BG_site_rp_new","BG site:",c("",unique(options_rp_nr$bg_site)),selected=old_row_rp$BG_site_rp_new))),
+                     hr(),
+                     fluidRow(column(6,selectInput("Third_Party_new","Third Party:",c("",unique(options_rp_nr$third_party)),selected=old_row_rp$Third_Party_new))),
+                     hr(),
+                     
+                     actionButton("RP_changes","Save changes"),
+                     
+                     tags$script(HTML("$(document).on('click', '#save_changes', function () {
+                                      var list_value=[]
+                                      for (i = 0; i < $( '.new_input' ).length; i++)
+                                      {
+                                      list_value.push($( '.new_input' )[i].value)
+                                      }
+                                      Shiny.onInputChange('newValue', list_value)
+                 });"))
+                   )
+                   )
+                   showModal(modalDialog(my_input_rp(),easyClose=TRUE) )
+                   x<-old_row_rp$INC_rp
+                 }
+               })
+  
+  
+  observeEvent(input$Line_closure,{
+    if (input$Line_closure!="No line closure"){
+      shinyjs::enable("Line_closed_Free_Text")
+      shinyjs::enable("Call_routing")
+      shinyjs::enable("BG_site_rp_new")
+      shinyjs::enable("Third_Party_new")
+    }
+    else {
+      shinyjs::disable("Line_closed_Free_Text")
+      shinyjs::disable("Call_routing")
+      shinyjs::disable("BG_site_rp_new")
+      shinyjs::disable("Third_Party_new")
+      updateTextInput(session, "Line_closed_Free_Text","Line closed Free Text:", "")
+      updateTextInput(session, "Call_routing","Call routing:", "")
+      updateTextInput(session, "BG_site_rp_new","BG site:", "")
+      updateTextInput(session, "Third_Party_new","Third Party:", "")
+    }
+  })
+  
+  
+  
+  observeEvent(input$RP_changes,{
+    selected_row=as.numeric(gsub("modify_rp_","",input$lastClickId))
+    old_row_rp=vals4_rp$Data[selected_row]
+    
+    vals4_rp$Data[selected_row]<-data.table(
+      INC_rp=c(old_row_rp$INC_rp),
+      Site_rp=c(old_row_rp$Site_rp),
+      Business_area_rp=c(old_row_rp$Business_area_rp),
+      Process_rp=c(old_row_rp$Process_rp),
+      Team_name_rp=c(old_row_rp$Team_name_rp),
+      Priority_rp=c( old_row_rp$Priority_rp),
+      BG_site_rp=c(old_row_rp$BG_site_rp),
+      Third_party_rp=c(old_row_rp$Third_party_rp),
+      Timescale_rp=c(input$Timescale_rp),
+      IVR_messaging=c(input$IVR_messaging),
+      Online_messaging=c(input$Online_messaging),
+      Line_closure=c(input$Line_closure),
+      Line_closed_Free_Text=c(input$Line_closed_Free_Text),
+      Call_routing=c( input$Call_routing),
+      BG_site_rp_new=c( input$BG_site_rp_new),
+      Third_Party_new=c(input$Third_Party_new),
+      Changed_rp=c('Yes'),
+      Is_current_rp=c(''),
+      Date_time_rp=c(''))
+    
+    removeModal()
+  })
+  
+  #Ask for short description of the changes made by the user
+  observeEvent(input$Confirm_RP_mod,{
+    req(input$RP_mod_inc)
+    
+    changes_details_rp<-reactive(fluidPage(
+      h3(strong("Please give a short description of the changes"),align="center"),
+      hr(),
+      fluidRow(column(6,textAreaInput("changes_desc_rp","Desciption: ",width = 200))),
+      hr(),
+      actionButton("RP_changes_final","Submit")))
+    showModal(modalDialog(changes_details_rp(),easyClose=TRUE) )
+  })
+  
+  observeEvent(input$RP_changes_final,{
+    req(input$RP_mod_inc)
+    removeModal()
+    
+    All_data_mod_RP<-loadData_site_rp()
+    All_data_mod_RP<-sqldf(paste0("select * from All_data_mod_RP where INC_rp = '",input$RP_mod_inc,"' and Is_current_rp=",1))
+    All_data_mod_RP<-sqldf(paste0("select INC_rp,Site_rp,Business_area_rp,Process_rp,Team_name_rp,Priority_rp,BG_site_rp,
+                                   Third_party_rp,Timescale_rp,IVR_messaging,Online_messaging,
+                                   Line_closure,Line_closed_Free_Text,Call_routing,BG_site_rp_new,
+                                   Third_Party_new,Date_time_rp,User  from All_data_mod_RP "))
+    
+    temp_data_rp<-vals4_rp$Data
+    vals4_rp$Data<-sqldf("select * from temp_data_rp where Changed_rp='Yes'")
+    temp_data_rp<-vals4_rp$Data
+    
+    All_data_mod_RP<-sqldf(paste0("select a.*,case when length(b.Site_rp)>1 then 0 else 1 end as Is_current_rp  from All_data_mod_RP as a left join temp_data_rp as b 
+                                  on a.Site_rp=b.Site_rp and a.Business_area_rp=b.Business_area_rp and a.Process_rp=b.Process_rp and a.Team_name_rp=b.Team_name_rp and a.Priority_rp=b.Priority_rp 
+                                  and a.BG_site_rp=b.BG_site_rp and a.Third_party_rp=b.Third_party_rp"))
+    
+    
+    write.csv(All_data_mod_RP,"all_rp.csv")
+    old_dttm_rp<-sqldf("select distinct Date_time_rp from All_data_mod_RP")
+    #old entries
+    for (i in unique(old_dttm_rp$Date_time_rp)){
+      test2<-sqldf(paste0("select * from All_data_mod_RP where Date_time_rp='",i,"'"))
+      write_csv(test2,paste0("Data_site_RP/RP_Mydata",i,".csv"))
+    }
+    
+    #Write the new entries to the data
+    vals4_rp$Data$Date_time_rp<-format(Sys.time(), "%Y%m%d-%H%M%OS")
+    vals4_rp$Data$Is_current_rp<-1
+    vals4_rp$Data$Change_details_rp<-c(input$changes_desc_rp)
+    vals4_rp$Data$User<-readRDS("Current_user.Rda")
+    write.csv(x = vals4_rp$Data, file = paste0("Data_site_RP/RP_Mydata",format(Sys.time(), "%Y%m%d-%H%M%OS"),".csv"))
+    
+    shinyjs::reset("RP_mod_pg")
+    
+    #Send email for amending R&P details
+    sender <- "pankaj.kumar@britishgas.co.uk" # Replace with a valid address
+    recipients <- readRDS("Current_user.Rda") # Replace with one or more valid addresses
+    
+    # Convert the data frame into an HTML Table
+    y <- htmlTable(vals4_rp$Data, rnames = FALSE)
+    
+    # Define body of email
+    html_body <- paste0("<html><head>
+                          <style>
+                          body{font-family:Calibri, sans-serif;}
+                          table{border-left:1px solid #000000;border-top:1px solid #000000;}
+                          table th{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:bold; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                          table td{border-right:1px solid #000000;border-bottom:1px solid #000000;font-size:13px; font-weight:normal; margin: 0px; padding-left: 5px; padding-right: 5px; margin: 0px;}
+                          </style>
+                          </head><body><p> Resource & Planning details have been amended under the incident: </p>",
+                        y,
+                        "</body></html>")
+    
+    
+    email_rp <- send.mail(from = sender,
+                          to = recipients,
+                          subject="RP Details Amended",
+                          body = html_body,
+                          smtp = list(host.name = "smtp.uk.centricaplc.com", port = 25),
+                          authenticate = FALSE,
+                          html = TRUE,
+                          send = FALSE)
+    email_rp$send()
+    
+  })
+  
+  
+  
+  ##########################  Audit trail  ############################
+  
+  #Refresh incident numbers in Audit trail modifications
+  observeEvent(input$Refresh_btn_audit1,{
+    updateSelectInput(session,inputId = "audit_inc",label="Enter incident number:",
+                      choices=c("",unique(all_INC_data$Data$INC)),selected="")
+  })
+  
+  
+  output$audit_det_crt<-DT::renderDataTable({
+    req(input$audit_inc)
+    All_data_mod_audit<-loadData_crt_site()
+    All_data_mod_audit<-sqldf(paste0("select INC,Site,Business_area,Process,Description,Teams,People,Customer_contact,Systems,Facilities,Vulnurable_customers from All_data_mod_audit where INC = '",input$audit_inc,"'"))
+    datatable(All_data_mod_audit,options = list(dom = 't',scrollX=TRUE),rownames = FALSE,
+              escape=F)}
+  )
+  
+  output$moreControls <- renderUI({
+    req(input$audit_inc)
+    All_data_mod_CRT_comms<-loadData_crt_comms()
+    All_data_mod_CRT_ops<-loadData_crt_ops()
+    All_data_mod_CRT<-loadData_crt_site()
+    
+    All_data_mod_sit_rep <- loadData_site_rep()
+    
+
+    All_data_mod_CRT$Page_name<-"CRT"
+    All_data_mod_CRT$Page_name_full<-"Customer Response Team"
+    All_data_mod_CRT <- subset(All_data_mod_CRT,All_data_mod_CRT$Business_area != '')
+
+    All_data_mod_sit_rep$Page_name<-"sit_rep"
+    All_data_mod_sit_rep$Page_name_full<-"Situation Report"
+
+    All_data_mod_IMT<-loadData_site_imt()
+    
+    All_data_mod_IMT$Page_name<-"IMT"
+    All_data_mod_IMT$Page_name_full<-"Incident Management Team"
+
+    All_data_mod_NR<-loadData_site_nr()
+    
+    All_data_mod_NR$Page_name<-"NR"
+    All_data_mod_NR$Page_name_full<-"National Resilience Team"
+
+    All_data_mod_RP<-loadData_site_rp()
+    
+    All_data_mod_RP$Page_name<-"RP"
+    All_data_mod_RP$Page_name_full<-"Resource and Planning Team"
+    All_data_mod_RP <-subset(All_data_mod_RP,All_data_mod_RP$Team_name_rp != '')
+    
+    
+    colnames(All_data_mod_IMT)[colnames(All_data_mod_IMT)=="INC_imt"] <- "INC"
+    colnames(All_data_mod_IMT)[colnames(All_data_mod_IMT)=="Site_imt"] <- "Site"
+    colnames(All_data_mod_IMT)[colnames(All_data_mod_IMT)=="Date_time_imt"] <- "Date_time"
+    colnames(All_data_mod_IMT)[colnames(All_data_mod_IMT)=="Is_current_imt"] <- "Is_current"
+    
+    crt_imt <- smartbind(All_data_mod_CRT,All_data_mod_IMT)
+    
+    
+    colnames(All_data_mod_NR)[colnames(All_data_mod_NR)=="INC_nr"] <- "INC"
+    colnames(All_data_mod_NR)[colnames(All_data_mod_NR)=="Site_nr"] <- "Site"
+    colnames(All_data_mod_NR)[colnames(All_data_mod_NR)=="Date_time_nr"] <- "Date_time"
+    colnames(All_data_mod_NR)[colnames(All_data_mod_NR)=="Is_current_nr"] <- "Is_current"
+    colnames(All_data_mod_NR)[colnames(All_data_mod_NR)=="User_nr"] <- "User"
+    
+    crt_imt_nr <- smartbind(crt_imt,All_data_mod_NR)
+    
+    colnames(All_data_mod_RP)[colnames(All_data_mod_RP)=="INC_rp"] <- "INC"
+    colnames(All_data_mod_RP)[colnames(All_data_mod_RP)=="Site_rp"] <- "Site"
+    colnames(All_data_mod_RP)[colnames(All_data_mod_RP)=="Date_time_rp"] <- "Date_time"
+    colnames(All_data_mod_RP)[colnames(All_data_mod_RP)=="Is_current_rp"] <- "Is_current"
+    crt_imt_nr_rp <- smartbind(crt_imt_nr,All_data_mod_RP)
+    
+    colnames(All_data_mod_sit_rep)[colnames(All_data_mod_sit_rep)=="INC_sit_rep"] <- "INC"
+    colnames(All_data_mod_sit_rep)[colnames(All_data_mod_sit_rep)=="User_sit_rep"] <- "User"
+    colnames(All_data_mod_sit_rep)[colnames(All_data_mod_sit_rep)=="Date_time_si"] <- "Date_time"
+    colnames(All_data_mod_sit_rep)[colnames(All_data_mod_sit_rep)=="is_current"] <- "Is_current"
+    colnames(All_data_mod_sit_rep)[colnames(All_data_mod_sit_rep)=="Date"] <- "Date_sit_rep"
+
+    crt_imt_nr_rp_sit_rep <- smartbind(crt_imt_nr_rp,All_data_mod_sit_rep)
+    
+
+    final_data <- crt_imt_nr_rp_sit_rep
+    
+    final_data <-subset(final_data,final_data$Page_name != 'RP')
+
+    
+    write.csv(final_data,"final_dataa1.csv")
+    write.csv(All_data_mod_CRT_comms,"All_data_mod_CRT_comms.csv")
+    
+    final_data1<-sqldf(paste0("select * from final_data where INC = '",input$audit_inc,"'"))
+    
+    
+    
+    
+    
+    #final data list
+    crt_data_final<- final_data1[,colnames(final_data1) %in% c("INC","Site","Business_area","Process","Description","Teams","Customer_contact","Systems_other","Facilities_other","People","Vulnerable_customers","Systems","Facilities","Description","Date_time","User","Is_current","Page_name_full")]
+    
+    crt_data_final <-subset(crt_data_final,crt_data_final$Business_area != '')
+
+    imt_data_final<- final_data1[,colnames(final_data1) %in% c("INC","Site","Timescale_imt","Who_is_impacted","Estimated_volume_of_users_impacted","Root_cause","Timescales_for_recovery",
+                                                               "IMT","Comms","Site_continuity","Description",
+                                                               "Date_time","User","Is_current","Page_name_full")]
+    
+    imt_data_final <-subset(imt_data_final,imt_data_final$Who_is_impacted != '')
+    
+    nr_data_final<- final_data1[,colnames(final_data1) %in% c("INC","Site","Action_required","Sungard_required","Sungard_available","Sungard_accessible",
+                                                              "Escalation_required","Escalated_to","Comments","Date_time","User","Is_current","Page_name_full")]
+    
+    nr_data_final <-subset(nr_data_final,nr_data_final$Action_required != '')
+    
+    rp_data_final<- final_data1[,colnames(final_data1) %in% c("INC","Site","Business_area_rp","Process_rp","Team_name_rp","Priority_rp","BG_site_rp",
+                                                              "Third_party_rp","Timescale_rp","IVR_messaging","Online_messaging",
+                                                              "Line_closure","Line_closed_Free_Text","Call_routing","BG_site_rp_new",
+                                                              "Third_Party_new","Date_time","User","Is_current")]
+    
+    sit_rep_data_final <- final_data1[,colnames(final_data1) %in% c("INC","Chairperson","Date_sit_rep","Time","Summary","Updates","Date_time","Site","Owner","Action","Status","Updates2","Is_current","Line_number","User","Page_name","Page_name_full")]
+    
+    sit_rep_data_final <-subset(sit_rep_data_final,sit_rep_data_final$Chairperson != '')
+    
+    crt_imt_display <- smartbind(crt_data_final,imt_data_final)
+    
+    crt_nr_imt_display <- smartbind(crt_imt_display,nr_data_final)
+
+    crt_nr_imt_display <- smartbind(crt_nr_imt_display,sit_rep_data_final)
+    
+    
+    crt_nr_imt_display <- select(crt_nr_imt_display,INC,User,Date_time,Page_name_full,everything())
+    write.csv(crt_nr_imt_display,"display.csv")
+    
+    output$downloaddata_audit_trail <- downloadHandler(
+      filename = function() {
+        paste("Audit Trail for INC",input$audit_inc,".csv")
+      },
+      content = function(file) {
+        all_data_audit_trail <-crt_nr_imt_display
+        DT_audit_trail=sqldf("select * from all_data_audit_trail")
+        write.csv(DT_audit_trail,file, row.names = FALSE,na="")
+      })
+    
+    
+    dateinfo <- sqldf(paste0("select *,substr(date_time,1,8) as date from final_data1 where INC = '",input$audit_inc,"'"))
+    dateinfo <- sqldf(paste0("select * from dateinfo order by date_time "))
+    
+    unique_date <- sqldf(paste0("select distinct date as 'date_unique' from dateinfo "))
+
+    
+    cnt_date <- sqldf(paste0("select count(distinct date) as 'date_cnt' from dateinfo "))
+
+    full_string<-''
+
+    y_test <- htmlTable(final_data1, rnames = FALSE)
+
+    i=1
+    j=1
+    concat_str<-''
+    for (i in  1:cnt_date$date_cnt) {
+      
+      #                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               count_aud_inc<-sqldf(paste0("select count(distinct date_time) as 'cnt' from dateinfo where "))
+      count_aud_inc<-sqldf(paste0("select count(distinct date_time) as cnt from dateinfo where substr(date_time,1,8)='",substr(unique_date$date_unique[i],1,8),"'")) 
+
+      
+      datestamp<-sqldf(paste0("select distinct date_time as 'dtstamp' from dateinfo where substr(date_time,1,8)='",substr(unique_date$date_unique[i],1,8),"'"))
+
+      
+      b=''
+      a<-paste0('
+           <li class = "time-label">
+             <span class = "bg-red"> ',as.Date(substr(unique_date$date_unique[i],1,8),format="%Y%m%d"),' </span>
+           </li>
+           ')
+      for (j in  1:count_aud_inc$cnt){
+        
+        b1<-paste0('<li>
+             <i class = "fa fa-envelope bg-blue"></i>
+             <div class = "timeline-item">
+               <span class = "time">
+                 <i class = "fa fa-clock-o"></i>
+                ',as.ITime(substr(datestamp$dtstamp[j],10,15),format="%H%M%S"),'
+               </span>
+               
+               <h3 class = "timeline-header">
+                 <a href = "#"> ',subset(final_data1,final_data1$Date_time==datestamp$dtstamp[j])[1,]$Page_name_full, ' </a>
+                 
+               </h3>
+
+               <div class = "timeline-body" style="overflow-x:auto" >
+                
+                  ',ifelse(subset(final_data1,final_data1$Date_time==datestamp$dtstamp[j])[1,]$Page_name=="CRT",subset(crt_data_final,crt_data_final$Date_time==datestamp$dtstamp[j]) %>% tableHTML(caption = "Description" ,rownames=FALSE, spacing = '2px') %>% 
+                             # add_css_thead(css = list('background-color', 'lightgray'))
+                             add_css_header(css = list(c('text-align','padding'), c('center','20px')),headers=c(1:19)) %>%  
+                             add_css_row(css = list(c('text-align','padding'), c( 'center','20px'))),
+                           ifelse(subset(final_data1,final_data1$Date_time==datestamp$dtstamp[j])[1,]$Page_name=="IMT",subset(imt_data_final,imt_data_final$Date_time==datestamp$dtstamp[j]) %>% tableHTML(rownames=FALSE, spacing = '2px') %>%
+                                    add_css_header(css = list(c('text-align','padding'), c('center','20px')),headers=c(1:21)) %>%  
+                                    add_css_row(css = list(c('text-align','padding'), c( 'center','20px'))),
+                                  ifelse(subset(final_data1,final_data1$Date_time==datestamp$dtstamp[j])[1,]$Page_name=="NR",subset(nr_data_final,nr_data_final$Date_time==datestamp$dtstamp[j]) %>% tableHTML(rownames=FALSE, spacing = '2px')%>%
+                                           add_css_header(css = list(c('text-align','padding'), c('center','20px')),headers=c(1:12)) %>%  
+                                           add_css_row(css = list(c('text-align','padding'), c( 'center','20px'))),
+                                         ifelse(subset(final_data1,final_data1$Date_time==datestamp$dtstamp[j])[1,]$Page_name=="RP",subset(rp_data_final,rp_data_final$Date_time==datestamp$dtstamp[j]) %>%tableHTML(rownames=FALSE, spacing = '2px') %>%
+                                                  add_css_header(css = list(c('text-align','padding'), c('center','20px')),headers=c(1:19)) %>%  
+                                                  add_css_row(css = list(c('text-align','padding'), c('center','20px'))),
+                                                # ifelse(subset(final_data1,final_data1$Date_time==datestamp$dtstamp[j])[1,]$Page_name=="Comms",subset(comms_data_final,comms_data_final$Date_time==datestamp$dtstamp[j]) %>%tableHTML(rownames=FALSE,collapse = 'separate', spacing = '2px') %>%
+                                                #          add_css_header(css = list(c('text-align','padding'), c('center','20px')),headers=c(1:19)) %>%
+                                                #          add_css_row(css = list(c('text-align','padding'), c('center','20px'))),
+                                                ifelse(subset(final_data1,final_data1$Date_time==datestamp$dtstamp[j])[1,]$Page_name=="sit_rep",subset(sit_rep_data_final,sit_rep_data_final$Date_time==datestamp$dtstamp[j]) %>%tableHTML(rownames=FALSE,spacing = '2px') %>%
+                                                         add_css_header(css = list(c('text-align','padding'), c('center','20px')),headers=c(1:19)) %>%
+                                                         add_css_row(css = list(c('text-align','padding'), c('center','20px'))),
+                                                       # ifelse(subset(final_data1,final_data1$Date_time==datestamp$dtstamp[j])[1,]$Page_name=="	Ops",subset(ops_data_final,ops_data_final$Date_time==datestamp$dtstamp[j]) %>% tableHTML(rownames=FALSE,collapse = 'separate', spacing = '2px')%>%
+                                                       #          add_css_header(css = list(c('text-align','padding'), c('center','20px')),headers=c(1:12)) %>%
+                                                       #          add_css_row(css = list(c('text-align','padding'), c( 'center','20px'))),
+                                                       
+                                                       
+                                                       tableHTML(crt_data_final[i,])
+                                                       
+                                                       
+                                                ) 
+                                         )
+                                  )
+                           )
+                  ) ,'
+               </div>
+
+               <div class = "timeline-footer">
+                 <a class = "btn btn-primary btn-xs">',subset(final_data1,final_data1$Date_time==datestamp$dtstamp[j])[1,]$User,'</a>
+               </div>
+             </div>')
+
+        
+        j=j+1
+        b<-paste0(b,b1)
+      }
+      c<-paste0('</li>')
+       
+
+      string1<-paste0(a,b,c)
+
+      full_string<-paste0(full_string,string1)      
+      i=i+1
+      
+
+      
+    }
+    
+    
+    
+    fluidPage(
+      HTML(paste0(
+        '
+            <div class="tab-pane" id="timeline"  >
+
+            <ul class="timeline timeline-inverse">
+
+           ',unlist(full_string),'</ul> </div>'))
+    )
+    
+    
+    
+    
+    
+  } )
+  
+  
+  
+  ################################## Summary Page ###############
+  
+  crt_data<-reactiveValues()
+  crt_data$Data<-loadData_crt_site()
+  imt_data<-reactiveValues()
+  imt_data$Data<-loadData_site_imt()
+  nr_data<-reactiveValues()
+  nr_data$Data<-loadData_site_nr()
+  rp_data<-reactiveValues()
+  rp_data$Data<-loadData_site_rp()
+
+
+
+  #total incidents
+  output$Incidents_count <- renderText({
+    all_inc_temp<-crt_data$Data
+    paste(length(unique(all_inc_temp$INC)))
+  })
+
+  #open incidents
+  output$open_incidents <- renderText({
+    open_inc_temp<-crt_data$Data
+    paste(length(unique(open_inc_temp$INC)))
+  })
+
+  #closed incidents
+  output$closed_incidents <- renderText({
+    closed_inc_temp<-crt_data$Data
+    closed_inc_temp<-0
+    paste(closed_inc_temp)
+  })
+
+  #most impacted site
+  output$most_impacted_site <- renderText({
+    crt_data<-crt_data$Data
+    test_crt_last_up<-sqldf("select Site, count(*) as cnt from crt_data group by Site order by cnt desc limit 1")
+    paste0(test_crt_last_up$Site," (",test_crt_last_up$cnt,") ")
+  })
+
+  #last updated date
+  output$last_updated_dates <- renderText({
+
+    imt_data<-imt_data$Data
+    crt_data<-crt_data$Data
+    rp_data<-rp_data$Data
+    nr_data<-nr_data$Data
+
+    test_imt_last_up<-sqldf("select INC as INC, substr(Date_time_imt,1,8) as Date_time  from imt_data where length(Date_time_imt)>1 ")
+    test_imt_last_update<-sqldf("select * , 'IMT' as team from test_imt_last_up")
+    test_crt_last_up<-sqldf("select INC, substr(Date_time,1,8) as Date_time  from crt_data where length(Date_time)>1 ")
+    test_crt_last_update<-sqldf("select * , 'CRT' as team from test_crt_last_up")
+
+    test_nr_last_up<-sqldf("select INC as INC, substr(Date_time_nr,1,8) as Date_time  from nr_data where length(Date_time_nr)>1")
+    test_nr_last_update<-sqldf("select * , 'NR' as team from test_nr_last_up")
+    test_rp_last_up<-sqldf("select INC_rp as INC, substr(Date_time_rp,1,8) as Date_time  from rp_data where length(Date_time_rp)>1")
+    test_rp_last_update<-sqldf("select * , 'RP' as team from test_rp_last_up")
+
+    All_data<- rbind.data.frame( test_crt_last_update, test_imt_last_update, test_nr_last_update, test_rp_last_update)
+
+    last_updated_temp_date<-sqldf("select max(Date_time) from All_data")  #last updated date
+    last_updated_temp_date<-as.character(last_updated_temp_date)
+    last_updated_temp_date<- as.Date(last_updated_temp_date, format =  '%Y%m%d')
+    paste0(last_updated_temp_date)
+  })
+
+  #last updated incident number
+  output$last_updated_temp_INC <- renderText({
+    imt_data<-imt_data$Data
+    crt_data<-crt_data$Data
+    nr_data<-nr_data$Data
+    rp_data<-rp_data$Data
+
+    test_imt_last_up<-sqldf("select INC as INC, Date_time_imt as Date_time  from imt_data where length(Date_time_imt)>1 ")
+    test_imt_last_update<-sqldf("select * , 'IMT' as team from test_imt_last_up")
+    test_crt_last_up<-sqldf("select INC, Date_time as Date_time  from crt_data where length(Date_time)>1 ")
+    test_crt_last_update<-sqldf("select * , 'CRT' as team from test_crt_last_up")
+
+    test_nr_last_up<-sqldf("select INC as INC, Date_time_nr as Date_time  from nr_data where length(Date_time_nr)>1")
+    test_nr_last_update<-sqldf("select * , 'NR' as team from test_nr_last_up")
+    test_rp_last_up<-sqldf("select INC_rp as INC, Date_time_rp as Date_time  from rp_data where length(Date_time_rp)>1")
+    test_rp_last_update<-sqldf("select * , 'RP' as team from test_rp_last_up")
+
+    All_data<- rbind.data.frame( test_crt_last_update, test_imt_last_update, test_nr_last_update, test_rp_last_update)
+
+    last_updated_temp_INC<-sqldf("select INC, Date_time from All_data order by Date_time desc limit 1")
+    last_updated_temp_INC<-sqldf("select INC from last_updated_temp_INC") #last incident number that got updated
+    paste0(last_updated_temp_INC)
+  })
+
+  #Last user who updated
+  output$last_updated_temp_user <- renderText({
+
+    imt_data<-imt_data$Data
+    crt_data<-crt_data$Data
+    nr_data<-nr_data$Data
+    rp_data<-rp_data$Data
+
+    test_imt_last_up<-sqldf("select INC as INC, Date_time_imt as Date_time  from imt_data where length(Date_time_imt)>1 ")
+    test_imt_last_update<-sqldf("select * , 'IMT' as team from test_imt_last_up")
+    test_crt_last_up<-sqldf("select INC, Date_time as Date_time  from crt_data where length(Date_time)>1 ")
+    test_crt_last_update<-sqldf("select * , 'CRT' as team from test_crt_last_up")
+
+    test_nr_last_up<-sqldf("select INC as INC, Date_time_nr as Date_time  from nr_data where length(Date_time_nr)>1")
+    test_nr_last_update<-sqldf("select * , 'NR' as team from test_nr_last_up")
+    test_rp_last_up<-sqldf("select INC_rp as INC, Date_time_rp as Date_time  from rp_data where length(Date_time_rp)>1")
+    test_rp_last_update<-sqldf("select * , 'RP' as team from test_rp_last_up")
+
+    All_data<- rbind.data.frame(test_crt_last_update, test_imt_last_update, test_nr_last_update, test_rp_last_update)
+
+    last_updated_temp_INC<-sqldf("select INC, Date_time from All_data order by Date_time desc limit 1")
+    user_details<-loadData_crt_site()
+    latest_INC_last_up<- sqldf("select a.INC, a.Date_time, b.user as Last_Updated_By from last_updated_temp_INC 'a' left join user_details 'b' on a.INC =  b.INC group by a.INC order by a.Date_time")
+    latest_INC_last_up$Date_time<-as.Date(latest_INC_last_up$Date_time,"%Y%m%d")
+    last_updated_temp_user<-sqldf("select Last_Updated_By from latest_INC_last_up ", method = "name__class") #last user who updated
+
+    prefix<- sub("@.*", " ", last_updated_temp_user)
+    first_name<- sub("\\..*", "", prefix)
+    last_name<- sub(".*\\.", "", prefix)
+
+    first_name<- paste(toupper(substr(first_name, 1, 1)), substr(first_name, 2, nchar(first_name)), sep="")
+    last_name<- paste(toupper(substr(last_name, 1, 1)), substr(last_name, 2, nchar(last_name)), sep="")
+    name<- paste(first_name, last_name, sep = " ", collapse = NULL)
+    paste(name)
+  })
+
+
+  # #involvementtest
+  updateProgressBar(session = session, id = "crt_invol", value = length(unique(loadData_crt_site()$INC))*100/length(unique(loadData_crt_site()$INC)))
+  updateProgressBar(session = session, id = "site_invol", value = count_imt_involvement()*100/length(unique(loadData_crt_site()$INC)))
+  updateProgressBar(session = session, id = "rp_invol", value = count_rp_involvement()*100/length(unique(loadData_crt_site()$INC)))
+  updateProgressBar(session = session, id = "nr_invol", value = count_nr_involvement()*100/length(unique(loadData_crt_site()$INC)))
+
+
+  #Monthly trends
+  output$d<-renderPlotly({
+    req(input$Site_mod_inc)
+    crt_data<-crt_data$Data
+
+    if(input$Site_mod_inc== "All Sites") {
+      crt_data<-sqldf("select distinct INC , substr(Date_time,1,8) as Date_time_crt  from crt_data where length(Date_time)>1 ")
+      crt_data$Date_time_crt<-as.Date(crt_data$Date_time_crt,"%Y%m%d")
+      ggplot(crt_data, aes(x=Date_time_crt)) +
+        geom_histogram(fill="#A9DFBF",color="#AEB6BF") + 
+        labs(x="", y = "") + 
+        theme_classic()}
+        
+    #site-wise ggplot
+    else{
+      crt_data<-sqldf(paste0("select distinct INC , substr(Date_time,1,8) as Date_time_crt  from crt_data where Site= '",input$Site_mod_inc,"' and length(Date_time)>1 "))
+      crt_data$Date_time_crt<-as.Date(crt_data$Date_time_crt,"%Y%m%d")
+      ggplot(crt_data, aes(x=Date_time_crt)) +
+        geom_histogram(fill="#A9DFBF",color="#AEB6BF") + 
+        labs(x="Dates", y = "INC count") + 
+        theme_classic()}
+  })
+  
+  ##Latest Incident Details
+  output$open_button<-DT::renderDataTable({
+    imt_data<-imt_data$Data
+    crt_data<-crt_data$Data
+    nr_data<-nr_data$Data
+    rp_data<-rp_data$Data
+
+    test_imt_last_up<-sqldf("select INC as INC, substr(Date_time_imt,1,8) as Date_time  from imt_data where length(Date_time_imt)>1 ")
+    test_imt_last_update<-sqldf("select * , 'IMT' as team from test_imt_last_up")
+    test_crt_last_up<-sqldf("select INC, substr(Date_time,1,8) as Date_time  from crt_data where length(Date_time)>1 ")
+    test_crt_last_update<-sqldf("select * , 'CRT' as team from test_crt_last_up")
+
+    test_nr_last_up<-sqldf("select INC as INC, substr(Date_time_nr,1,8) as Date_time  from nr_data where length(Date_time_nr)>1")
+    test_nr_last_update<-sqldf("select * , 'NR' as team from test_nr_last_up")
+    test_rp_last_up<-sqldf("select INC_rp as INC, substr(Date_time_rp,1,8) as Date_time  from rp_data where length(Date_time_rp)>1")
+    test_rp_last_update<-sqldf("select * , 'RP' as team from test_rp_last_up")
+
+    All_data<- rbind.data.frame( test_crt_last_update, test_imt_last_update, test_nr_last_update, test_rp_last_update)
+    All_data<-sqldf(paste0("select * , '",input$bttn1,"' as Status from All_data"))
+
+    user_details<-reactiveValues()
+    user_details<-loadData_crt_site()
+    latest_INC_test<-sqldf("select INC, substr(Date_time,1,8) as Date_time, team  from All_data where length(Date_time)>1 ")
+    latest_INC_test$Date_time<-as.Date(latest_INC_test$Date_time,"%Y%m%d")
+
+    latest_INC_test<- sqldf("select a.INC,  a.team as Description, a.Status, min(a.Date_time) as Start_date, b.user as Last_Updated_By from All_data 'a' left join user_details 'b' on a.INC =  b.INC group by a.INC order by a.Date_time desc limit 10")
+    latest_INC_test$Start_date<-as.Date(latest_INC_test$Start_date,"%Y%m%d")
+    latest_INC_test$End_date<- Sys.Date()
+    latest_INC_test$Days_open<-difftime(latest_INC_test$End_date,latest_INC_test$Start_date,  units = "days")
+    latest_INC_test<- sqldf("select INC, Description, Status, floor(Days_open) as Days_open , Last_Updated_By  from latest_INC_test ", method = "name__class")
+
+    DT= latest_INC_test
+    DT[["Status"]]<-
+      paste0('
+                <div class="btn-group" role="group" aria-label="Basic example">
+                <button type="button" class="btn btn-success btn-sm modify"id=modify_crt_',1:nrow(latest_INC_test),'>Open</button>
+                </div>
+                ')
+    DT<-DT %>% select(Status,everything())
+    DT<-sqldf("select INC, Description, Status, floor(Days_open) as Days_open , Last_Updated_By  from DT ", method = "name__class")
+    datatable(DT,options = list(dom = 't',scrollX=TRUE,columnDefs = list(list(className = 'dt-center', targets = "_all"))),rownames = FALSE,
+              escape=F)
+
+  }
+  )
+
+  #incident dropdown timeline
+  observeEvent(input$Refresh_btn_timeline,{
+    updateSelectInput(session,inputId = "inc_time",label="Enter incident number:",
+                      choices=c("",unique(crt_data$Data$INC)),selected="")
+  })
+
+  #Time Line
+  observeEvent(input$inc_time,{
+    req(input$inc_time)
+    output$timeline<-renderTimevis({
+
+      imt_data<-imt_data$Data
+      crt_data<-crt_data$Data
+      nr_data<-nr_data$Data
+      rp_data<-rp_data$Data
+
+      crt_data <- subset(crt_data,crt_data$Site != '')
+      imt_data <- subset(imt_data,imt_data$Who_is_impacted != '')
+      nr_data <-subset(nr_data,nr_data$Action_required != '')
+      rp_data <-subset(rp_data,rp_data$Timescale_rp != '')
+
+      test_imt_last_up<-sqldf("select INC as INC, substr(Date_time_imt,1,8) as Date_time  from imt_data where length(Date_time_imt)>1 ")
+      test_imt_last_update<-sqldf("select * , 'IMT' as team from test_imt_last_up")
+      test_crt_last_up<-sqldf("select INC, substr(Date_time,1,8) as Date_time  from crt_data where length(Date_time)>1 ")
+      test_crt_last_update<-sqldf("select * , 'CRT' as team from test_crt_last_up")
+
+      test_nr_last_up<-sqldf("select INC as INC, substr(Date_time_nr,1,8) as Date_time  from nr_data where length(Date_time_nr)>1")
+      test_nr_last_update<-sqldf("select * , 'NR' as team from test_nr_last_up")
+      test_rp_last_up<-sqldf("select INC_rp as INC, substr(Date_time_rp,1,8) as Date_time  from rp_data where length(Date_time_rp)>1")
+      test_rp_last_update<-sqldf("select * , 'RP' as team from test_rp_last_up")
+
+      All_data<- rbind.data.frame( test_crt_last_update, test_imt_last_update, test_nr_last_update, test_rp_last_update)
+      timeline_table<-All_data
+      timeline_table$Date_time<-as.Date(timeline_table$Date_time,"%Y%m%d")
+      timeline_table<-unique(timeline_table)
+
+      if(input$inc_time== "All Incidents") {
+        timeline_table<-sqldf(paste0("select * from timeline_table"))
+        timeline_table<-sqldf("select team, Date_time as Start_date, lead(Date_time) over (partition by team order by Date_time) as End_date from timeline_table")
+
+      }
+      else {
+        # timeline_table<-sqldf(paste0("select a.* from timeline_table as a where a.INC= 1"))
+        timeline_table<-sqldf(paste0("select a.* from timeline_table as a where a.INC= '", input$inc_time,"'"))
+        timeline_table<-sqldf("select INC, team, Date_time as Start_date, lead(Date_time) over (partition by INC order by Date_time) as End_date from timeline_table")
+      }
+
+      timeline_table<-unique(timeline_table)
+      df<-timeline_table
+
+      df$End_date[nrow(df)] = Sys.Date()
+      i<-1
+      j<-1
+      z<-dim(df)[1]
+
+      while(i < z)
+      {
+        if(df$team[j+1]== df$team[j])
+        {
+          df$End_date[j]= df$End_date[j+1]
+          df<- df[-(j+1),]
+        }
+        else
+        { j <- j+1}
+        i<-i+1
+      }
+
+
+      timeline_table<-df
+
+      timeline_table<-timeline_table %>%
+        mutate(End_date=ifelse(Start_date==End_date,NA, End_date))
+
+      timeline_table$Start_date<-as.Date.numeric(timeline_table$Start_date,'1970-01-01')
+      timeline_table$End_date<-as.Date.numeric(timeline_table$End_date,'1970-01-01')
+      timeline_table<-sqldf("select team as content, start_date as start, End_date as end from timeline_table ")
+
+      timeline_table$start<-as.Date.numeric(timeline_table$start,'1970-01-01')
+      timeline_table$end<-as.Date.numeric(timeline_table$end,'1970-01-01')
+      timevis(timeline_table)
+    })})
+
+} #End of server code
+
+#Define mandatory fields
+fieldsMandatory <- c("Site","Bus_Ar","pro_Ar","desc","eng_team","People","cust_cont","systems","facilities","vuln_cust","comm_req","operations_invok","operational_call")
+fieldsMandatory_crt_add <- c("Site_add","Bus_Ar_add","pro_Ar_add","desc_add","eng_team_add","People_add","cust_cont_add","systems_add","facilities_add","vuln_cust_add")
+
+fieldsMandatory_amend_site <- c("desc_amend","Teams_amend","People_amend","cust_cont_amend","systems_amend","facilities_amend","Vulnurable_customers_amend")
+fieldsMandatory_sit_rep <- c("enter_date_sit","inc_site_rep","site_rep_ChairPerson_","site_rep_summary_","site_rep_updates_","Site_sit_rep","site_rep_owner1","site_rep_action1","site_rep_summary1","site_rep_updates1")
+fieldsMandatory_site_imt<- c("Who_is_impacted","Estimated_volume_of_users_impacted","Timescales_for_recovery","Root_cause","IMT","Comms","Site_continuity","Description")
+fieldsMandatory_site_nr<- c("Action_required","Sungard_required","Escalation_required","Comments")
+#### Save the entered details
+fieldsAll <- c("Site","Bus_Ar","pro_Ar","desc","eng_team","People","cust_cont","systems","facilities","vuln_cust","comm_req","operations_invok","operational_call")
+data_dir<-file.path("Data")
+
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+
+
