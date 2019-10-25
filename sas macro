@@ -1,0 +1,1586 @@
+
+
+****** Below script creates incident data of 3 months and EWFM (BGR) data and then map it to each other 
+to say whether that segment was genuine or not ;
+
+%let exec_time=%sysfunc(datetime(),datetime16.);
+%put &exec_time.;
+
+%macro runquit;
+     ;
+     run;
+
+     quit;
+
+     %if &syserr. ne 0 %then
+           %do;
+                %if &syserr. ne 4 %then
+                      %do;
+                           %put &SYSERRORTEXT.;
+                           %let error_time = %sysfunc(datetime(),datetime16.);
+                                 %let seconds = %sysevalf( "&error_time."dt -"&exec_time."dt) ;
+                                   %put &seconds;
+                           FILENAME output EMAIL
+     SUBJECT="ERROR: Sch_rep- %sysfunc(getoption(sysin)) date:&exec_time."
+     from= "chirag.satwani@britishgas.co.uk" 
+     TO= ("abhiram.patankar@britishgas.co.uk", "chirag.satwani@britishgas.co.uk","Deepak.tyagi@britishgas.co.uk" )   /* Required for HTML output */
+;
+
+DATA _NULL_;
+     FILE output;
+     PUT "Executed_at: &exec_time.";
+     put;
+     put "Error_message: &SYSERRORTEXT.";
+     put;
+     put "Error_time: &error_time.";
+     put;
+     put "Execution_time(in seconds): &seconds. ";
+RUN;
+
+
+
+                           %abort cancel;
+                      %end;
+           %end;
+%mend runquit;
+
+
+
+/*tables used in this code */
+
+/*   Prod_history_capture_open.snow_incident */
+/*   Prod_history_capture_open.snow_cmdb_ci_service*/
+/*   Prod_history_capture_open.snow_sys_user_group*/
+/*   Prod_history_capture_open.snow_cmn_location */
+/**/
+/*   Prod_history_capture_open.ewfm_BGR_det_seg */
+/*   Prod_history_capture_open.ewfm_BGR_seg_code*/
+/*   Prod_history_capture_open.ewfm_BGR_emp */
+/*   Prod_history_capture_open.ewfm_bgr_emp_grp_ass*/
+/*   Prod_history_capture_open.ewfm_bgr_emp_grp_node*/
+/**/
+/*   Prod_history_capture_open.ewfm_BGNE_det_seg */
+/*   Prod_history_capture_open.ewfm_BGNE_seg_code*/
+/*   Prod_history_capture_open.ewfm_BGNE_emp */
+/*   Prod_history_capture_open.ewfm_BGNE_emp_grp_ass*/
+/*   Prod_history_capture_open.ewfm_BGNE_emp_grp_node*/
+
+
+
+/**** changed 2 month date to 13 mmonth date to get 13 monthly view */
+/*However variable name remains unchanged as 2month only and Excel report is for last 8 weeks only*/
+
+/*%let Curr_date = %sysfunc(today()) ;*/
+/**/
+/*%let formatted_curr_date=%sysfunc(putn(&Curr_date,yymmddd10.));*/
+/* %let date_minus_2mnths=%sysfunc(putn(%sysfunc(intnx(month,&Curr_date,-15,s)),yymmddd10.));*/
+/**/
+/* %let date_minus_75_days=%sysfunc(putn(%sysfunc(intnx(days,&Curr_date,-470,b)),yymmddd10.));*/
+
+
+%let Curr_date = %sysfunc(today(),date9.) ;
+%put &Curr_date;
+
+%let formatted_curr_date=%sysfunc(putn(&Curr_date,yymmddd10.));
+
+%let date_minus_2mnths=%sysfunc(putn(%sysfunc(intnx(month,&Curr_date,-6,s)),yymmddd10.));
+
+%let date_minus_Excel=%sysfunc(putn(%sysfunc(intnx(month,&Curr_date,-2,s)),date9.));
+
+%let date_minus_75_days=%sysfunc(putn(%sysfunc(intnx(days,&Curr_date,-200,b)),yymmddd10.));
+
+
+%put &formatted_curr_date;
+%put &date_minus_2mnths;
+%put &date_minus_75_days;
+%put &date_minus_Excel ;
+
+
+%put &Curr_date;
+
+
+
+
+
+
+
+
+/********************* Incidents of last 3 months ***********************/
+/*   Adding buffer time of 15 days to start date --> start date -15 days */
+
+     PROC SQL;
+           CONNECT TO hadoop(%hdpconnect(analytics_temp_user));
+           Execute (  
+                     Drop table if exists analytics_temp_user.Dt_incidents_last2month
+
+             ) By Hadoop ;
+           Execute (
+     create table analytics_temp_user.Dt_incidents_last2month
+
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+
+
+     AS Select        a.close_code
+                           ,a.u_status_and_group
+                           ,a.close_notes
+                           ,a.description
+                           ,a.short_description
+                           ,a.closed_at
+                           ,a.opened_at
+                           ,a.sla_due
+                           
+                           ,a.u_sla_start
+                           ,a.work_end
+                           ,a.category
+                           ,a.u_category
+                           ,a.u_source_type
+                           ,a.contact_type
+                           ,a.correlation_id
+                           ,a.u_customer_reference
+                           ,a.u_customer_impact
+                           ,a.u_incident_resolution_code 
+                           ,a.u_incident_resolution_sub_code
+                           ,a.u_raised_by_helpdesk 
+                           ,a.u_raised_by_self_service 
+                           
+                           ,a.priority 
+                           ,a.reassignment_count 
+                           ,a.severity 
+                           ,a.state 
+                           ,a.sys_mod_count 
+                           
+                           ,a.u_re_opened_count
+                           
+                           ,a.u_service_impact 
+                           ,a.u_tier_2 
+                           ,a.u_work_status 
+                     
+                           ,a.assigned_to 
+                           ,a.cmdb_ci 
+                           ,a.u_cause 
+                           ,a.u_sub_cause
+                           ,a.u_classification 
+                           ,a.u_external_assigned_to 
+                           ,a.u_external_assignment_group 
+                           ,a.u_complaint_id
+                           ,a.u_other 
+                           ,a.u_error_message    
+                           ,a.u_existing_complaint    
+                           ,a.u_impact_area 
+                           ,a.u_stage_of_complaint    
+                           ,a.u_system     
+                           ,a.u_journey_impacted 
+                           ,a.u_business_area    
+                           ,a.u_landlord_type
+                           ,a.sys_id 
+                           ,a.u_external_reference 
+                           ,b.name as SERVICE
+                           , c.name as ASSIGNMENT_GROUP 
+                           , f.name as Requested_by_Name
+                           , f.employee_number as Requested_by_payroll, f.email as Requested_by_email
+                           , f.phone as Requested_by_phone
+                           , i.name as requested_for_Name
+                           , i.employee_number as requested_for_payroll
+                           , i.email as requested_for_email
+                           , i.phone as requested_for_phone
+                           , j.name as SITE 
+     ,Case when contact_type = "monitoring" then "Monitoring" When j.name 
+           in ( 'Cape Town - Fusion House', 'Cape Town - Voortrekker Road', 'Cardiff', 'Edinburgh', 'Hattersley'
+           , 'India', 'Leeds - City Park', 'Leicester - Aylestone Rd', 'Manchester - Talbot Rd', 'Mumbai - WNS'
+           , 'Noida - EXL', 'Pune - EXL', 'Rotherham - Ventura House', 'Staines - The Causeway'
+           , 'Stockport - Newbridge Lane', 'Uddingston - Murdoch House', 'Leeds - Canal St', 'Staines - Orbis'
+           , 'Cardiff - Fusion Point', 'London - Haymarket House', 'Oxford', 'Windsor - Millstream', 'Rotherham'
+           , 'Leicester - Spinneyside', 'Oldbury - Swallowfield', 'Staines - Swan House'
+           , 'Bellshill - Belgrave Street', 'London - Baker Street', 'Altrincham - LBM House', 'Glasgow - City Park'
+     ,"Glasgow - Baird Street","Leeds - New Bridge House","Uddingston","Tredegar","Leicester - NDC"
+     ,"Pune - WNS","London - Rathbone Pl.","Noida  - Plot No 3A ,Sector 126,"
+     ,"Noida - Sector 1","Staines - Lakeside East - Floor 1","Staines - Lakeside East - Floor Ground"
+     ,"Staines - Lakeside House","Staines - Lakeside House - Floor 1","Staines - Lakeside House - Floor 2"
+     ,"Staines - Lakeside West","Staines - Lakeside West - Floor 1","Staines - Lakeside West - Floor 2"
+     ,"Staines - Lakeside West - Floor Ground","Staines - Orbis 2 - Floor 1","Staines - Swan House - First Floor"
+     ,"Staines - Swan House - Second Floor","Staines-upon-Thames - Kingston Rd."
+     )
+     then "BG site" Else "Others" End as BG_site_category from 
+           (SELECT * from Prod_history_capture_open.snow_incident 
+                           Where to_date(opened_at) <="&formatted_curr_date."
+                           and to_date(opened_at) >="&date_minus_75_days."
+           )a 
+                left join 
+                      Prod_history_capture_open.snow_cmdb_ci_service B 
+                           On a.u_service_affected = b.sys_id left join 
+                Prod_history_capture_open.snow_sys_user_group c 
+                           on a.assignment_group = c.sys_id 
+           
+                     left join Prod_history_capture_open.snow_sys_user as f on a.u_requested_by = f.sys_id 
+                     left join Prod_history_capture_open.snow_sys_user as i on a.u_requested_for = i.sys_id 
+                     left join Prod_history_capture_open.snow_cmn_location j on a.location = j.sys_id
+
+     ) By hadoop ;
+     %runquit;
+
+/********* Table created for Ben in analytics RCA for last 6 months  */
+
+     PROC SQL;
+           CONNECT TO hadoop(%hdpconnect(Analytics_rca));
+           Execute (  
+                     Drop table if exists Analytics_rca.Dt_All_incidents_last6m
+
+             ) By Hadoop ;
+           Execute (
+     create table Analytics_rca.Dt_All_incidents_last6m
+
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+
+
+     AS Select * from 
+
+     analytics_temp_user.Dt_incidents_last2month
+     ) By hadoop ;
+     Quit;
+/****************Table created above for Ben  ******************************/
+
+
+/************ EWFM downtime segments *******************************/
+/*************   For BGR downtime only*/
+
+%let shift_code ='CONT_SHIFT';
+%let lunch_code='LUNCH';
+%let downtime_codes ='IS_SYSTEM_FAULT','IS_SYSTEM_FAULT_OUT_NOINC','IS_SYSTEM_FAULT_OUTSOURCE','IS_VM_UNAVAILABLE';
+
+PROC SQL ;
+CONNECT TO hadoop(%hdpconnect(analytics_rca));
+Execute 
+(
+Drop table if exists analytics_temp_user.Dt_Segments_BG 
+
+)By Hadoop ;
+
+Execute
+(
+Create table analytics_temp_user.Dt_Segments_BG 
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+     AS   
+Select 
+
+a.det_seg_sk    
+,a.seg_code_sk
+,a.emp_sk
+,G.emp_grp_node_sk
+,a.nom_date     
+,a.downtime_date
+
+,a.start_time   
+,a.stop_time
+,a.Duration
+,a.memo
+
+,b.code
+,b.descr
+
+,c.short_name   
+,c.sort_name    
+,c.id
+,c.last_name
+,c.first_name
+,c.eff_hire_nom_date  
+,c.term_nom_date 
+,c.active_flag  
+,c.time_zone_sk 
+,c.seniority
+
+,f.code as site
+,f.descr   as site_desc
+
+From 
+           (Select det_seg_sk,   seg_code_sk,    emp_sk,    nom_date,
+           From_unixtime(unix_timestamp(start_moment ,'mm')+3600,'HH:mm:ss') as Start_time
+           ,From_unixtime(unix_timestamp(stop_moment ,'mm')+3600,'HH:mm:ss') AS Stop_time
+     ,CASt(date_add(Add_months(From_unixtime(unix_timestamp(start_moment,'mm')+3600,'yyyy-MM-dd HH:mm:ss'),-70*12),-1) as date) as downtime_date
+           ,start_moment
+           ,stop_moment
+                ,stop_moment-start_moment as Duration 
+                     ,Memo
+
+                     From Prod_history_capture_open.ewfm_BG_det_seg 
+                Where CASt(date_add(Add_months(From_unixtime(unix_timestamp(start_moment ,'mm')+3600,'yyyy-MM-dd HH:mm:ss'),-70*12),-1) as date)>=   "&date_minus_2mnths."
+                     AND CASt(date_add(Add_months(From_unixtime(unix_timestamp(start_moment ,'mm')+3600,'yyyy-MM-dd HH:mm:ss'),-70*12),-1) as date)<= "&formatted_curr_date."
+                           and emp_sk <> "" 
+                           and det_seg_sk <> ""
+                           and seg_code_sk <> ""
+           )a
+
+     inner join 
+
+                ( Select * from Prod_history_capture_open.ewfm_BG_seg_code 
+                     Where code in ('IS_SYSTEM_FAULT','IS_SYSTEM_FAULT_OUT_NOINC','IS_SYSTEM_FAULT_OUTSOURCE','IS_VM_UNAVAILABLE'
+                                           ,'IS_SYSTEM_FAULT_OUT_NOINC','IS_SYSTEM_FAULT_OUTSOURCE','IS_SYSTEM_FAULT','IS_VM_UNAVAILABLE')
+               )B
+                On a.seg_code_sk = B.seg_code_sk
+
+     left join 
+           
+                Prod_history_capture_open.ewfm_BG_emp C
+           
+                     On a.emp_sk = C.emp_sk
+     Left join Prod_history_capture_open.ewfm_BG_emp_grp_ass G
+     On a.emp_sk=G.emp_sk
+
+     left join 
+     Prod_history_capture_open.ewfm_BG_emp_grp_node F On 
+G.emp_grp_node_sk = F.emp_grp_node_sk
+And f.emp_grp_class_sk ="-989999994492"
+
+) BY hadoop;
+%runquit;
+
+
+/************ OLD Code of BGS ************************************/
+/*****************For BGS ***************** */
+/**/
+/*%let shift_code ='SHIFT';*/
+/*%let lunch_code='LUNCH';*/
+/*%let downtime_codes ='BUS_ABS_SYSFLT','BUS_ABS_DMOVE','ES_TECHNICAL_HELPDESK';*/
+/**/
+/**/
+/*PROC SQL ;*/
+/*CONNECT TO hadoop(%hdpconnect(analytics_rca));*/
+/*Execute */
+/*(*/
+/*Drop table if exists analytics_temp_user.Dt_Segments_BGS */
+/**/
+/*)By Hadoop ;*/
+/**/
+/*Execute*/
+/*(*/
+/*Create table analytics_temp_user.Dt_Segments_BGS as */
+/*Select */
+/**/
+/*a.det_seg_sk  */
+/*,a.seg_code_sk*/
+/*,a.emp_sk*/
+/*,G.emp_grp_node_sk*/
+/*,a.nom_date   */
+/*,a.downtime_date*/
+/**/
+/*,a.start_time */
+/*,a.stop_time*/
+/*,a.Duration*/
+/*,a.memo*/
+/*,b.code*/
+/*,b.descr*/
+/**/
+/*,c.short_name */
+/*,c.sort_name  */
+/*,c.id*/
+/*,c.last_name*/
+/*,c.first_name*/
+/*,c.eff_hire_nom_date     */
+/*,c.term_nom_date    */
+/*,c.active_flag */
+/*,c.time_zone_sk     */
+/*,c.seniority*/
+/**/
+/*,f.code as site*/
+/*,f.descr as site_desc*/
+/**/
+/*From */
+/*         (Select det_seg_sk,   seg_code_sk,    emp_sk,    nom_date,*/
+/*         From_unixtime(unix_timestamp(start_moment,'mm')+3600,'HH:mm:ss') as Start_time*/
+/*         ,From_unixtime(unix_timestamp(stop_moment  ,'mm')+3600,'HH:mm:ss') AS Stop_time*/
+/*         ,CASt(date_add(Add_months(From_unixtime(unix_timestamp(start_moment ,'mm')+3600,'yyyy-MM-dd HH:mm:ss'),-70*12),-1) as date) as downtime_date*/
+/*         ,start_moment*/
+/*         ,stop_moment*/
+/*              ,stop_moment-start_moment as Duration */
+/*                   ,Memo*/
+/**/
+/*              From Prod_history_capture_open.ewfm_BGS_det_seg */
+/*              Where CASt(date_add(Add_months(From_unixtime(unix_timestamp(start_moment,'mm')+3600,'yyyy-MM-dd HH:mm:ss'),-70*12),-1) as date)>=    "&date_minus_2mnths."*/
+/*                   AND CASt(date_add(Add_months(From_unixtime(unix_timestamp(start_moment,'mm')+3600,'yyyy-MM-dd HH:mm:ss'),-70*12),-1) as date)<=  "&formatted_curr_date."*/
+/*                         and emp_sk <> "" */
+/*                         and det_seg_sk <> ""*/
+/*                         and seg_code_sk <> ""*/
+/*         )a*/
+/**/
+/*   inner join */
+/**/
+/*              ( Select * from Prod_history_capture_open.ewfm_BGS_seg_code */
+     /*                   Where code in ('BUS_ABS_SYSFLT','BUS_ABS_DMOVE','ES_TECHNICAL_HELPDESK')*/
+/*              )B*/
+/*              On a.seg_code_sk = B.seg_code_sk*/
+/**/
+/*   left join */
+/*                   Prod_history_capture_open.ewfm_BGS_emp C */
+/*                   On a.emp_sk = C.emp_sk*/
+/*   Left join Prod_history_capture_open.ewfm_BGS_emp_grp_ass G*/
+/*   On a.emp_sk=G.emp_sk*/
+/**/
+/*   left join */
+/*   Prod_history_capture_open.ewfm_BGS_emp_grp_node F On */
+/*G.emp_grp_node_sk = F.emp_grp_node_sk*/
+/*And f.emp_grp_class_sk ="-989999990567"*/
+/**/
+/*) BY hadoop;*/
+/*%runquit;*/
+
+
+/******************* BGNE is now BGS **********************************************/
+
+
+/*****************For BGS ***************** */
+
+
+
+/*%let shift_code ='SHIFT';*/
+/*%let lunch_code='LUNCH';*/
+/*%let downtime_codes ='IS_SYSTEM_FAULT_OUT_NOINC','IS_SYSTEM_FAULT_OUTSOURCE','IS_SYSTEM_FAULT','IS_VM_UNAVAILABLE';*/
+/**/
+/**/
+/*PROC SQL ;*/
+/*CONNECT TO hadoop(%hdpconnect(analytics_rca));*/
+/*Execute */
+/*(*/
+/*Drop table if exists analytics_temp_user.Dt_Segments_BGS*/
+/**/
+/*)By Hadoop ;*/
+/**/
+/*Execute*/
+/*(*/
+/*Create table analytics_temp_user.Dt_Segments_BGS as */
+/*Select */
+/**/
+/*a.det_seg_sk  */
+/*,a.seg_code_sk*/
+/*,a.emp_sk*/
+/*,G.emp_grp_node_sk*/
+/*,a.nom_date   */
+/*,a.downtime_date*/
+/**/
+/*,a.start_time */
+/*,a.stop_time*/
+/*,a.Duration*/
+/*,a.memo*/
+/*,b.code*/
+/*,b.descr*/
+/**/
+/*,c.short_name */
+/*,c.sort_name  */
+/*,c.id*/
+/*,c.last_name*/
+/*,c.first_name*/
+/*,c.eff_hire_nom_date     */
+/*,c.term_nom_date    */
+/*,c.active_flag */
+/*,c.time_zone_sk     */
+/*,c.seniority*/
+/**/
+/*,f.code as site*/
+/*,f.descr as site_desc*/
+/**/
+/*From */
+/*         (Select det_seg_sk,   seg_code_sk,    emp_sk,    nom_date,*/
+/*         From_unixtime(unix_timestamp(start_moment,'mm')+3600,'HH:mm:ss') as Start_time*/
+/*         ,From_unixtime(unix_timestamp(stop_moment  ,'mm')+3600,'HH:mm:ss') AS Stop_time*/
+/*         ,CASt(date_add(Add_months(From_unixtime(unix_timestamp(start_moment ,'mm')+3600,'yyyy-MM-dd HH:mm:ss'),-70*12),-1) as date) as downtime_date*/
+/*         ,start_moment*/
+/*         ,stop_moment*/
+/*              ,stop_moment-start_moment as Duration */
+/*                   ,Memo*/
+/**/
+/*              From Prod_history_capture_open.ewfm_BGNE_det_seg */
+/*              Where CASt(date_add(Add_months(From_unixtime(unix_timestamp(start_moment,'mm')+3600,'yyyy-MM-dd HH:mm:ss'),-70*12),-1) as date)>=    "&date_minus_2mnths."*/
+/*                   AND CASt(date_add(Add_months(From_unixtime(unix_timestamp(start_moment,'mm')+3600,'yyyy-MM-dd HH:mm:ss'),-70*12),-1) as date)<=  "&formatted_curr_date."*/
+/*                         and emp_sk <> "" */
+/*                         and det_seg_sk <> ""*/
+/*                         and seg_code_sk <> ""*/
+/*         )a*/
+/**/
+/*   inner join */
+/**/
+/*              ( Select * from Prod_history_capture_open.ewfm_BGNE_seg_code */
+/*                   Where code in ('IS_SYSTEM_FAULT_OUT_NOINC','IS_SYSTEM_FAULT_OUTSOURCE','IS_SYSTEM_FAULT','IS_VM_UNAVAILABLE')*/
+/*              )B*/
+/*              On a.seg_code_sk = B.seg_code_sk*/
+/**/
+/*   left join */
+/*                   Prod_history_capture_open.ewfm_BGNE_emp     C */
+/*                   On a.emp_sk = C.emp_sk*/
+/*   Left join Prod_history_capture_open.ewfm_BGNE_emp_grp_ass G*/
+/*   On a.emp_sk=G.emp_sk*/
+/**/
+/*   left join */
+/*   Prod_history_capture_open.ewfm_BGNE_emp_grp_node F On */
+/*G.emp_grp_node_sk = F.emp_grp_node_sk*/
+/*And f.emp_grp_class_sk ="-981539906028"*/
+/**/
+/*) BY hadoop;*/
+/*Quit;*/
+
+
+
+
+
+
+/************** for BGB *******************/
+
+/*%let shift_code ='SHIFT';*/
+/*%let lunch_code='LUNCH';*/
+/*%let downtime_codes ='OFFLINE ACTIVITY SYSTEM FAULT','ONLINE ACTIVITY SYSTEM FAULT','WNS DOWNTIME';*/
+/**/
+/**/
+/**/
+/*PROC SQL ;*/
+/*CONNECT TO hadoop(%hdpconnect(analytics_rca));*/
+/*Execute */
+/*(*/
+/*Drop table if exists analytics_temp_user.Dt_Segments_BGB */
+/**/
+/*)By Hadoop ;*/
+/**/
+/*Execute*/
+/*(*/
+/*Create table analytics_temp_user.Dt_Segments_BGB as */
+/*Select */
+/**/
+/*a.det_seg_sk  */
+/*,a.seg_code_sk*/
+/*,a.emp_sk*/
+/*,G.emp_grp_node_sk*/
+/*,a.nom_date   */
+/*,a.downtime_date*/
+/**/
+/*,a.start_time */
+/*,a.stop_time*/
+/*,a.Duration*/
+/*,a.memo*/
+/**/
+/*,b.code*/
+/*,b.descr*/
+/**/
+/*,c.short_name */
+/*,c.sort_name  */
+/*,c.id*/
+/*,c.last_name*/
+/*,c.first_name*/
+/*,c.eff_hire_nom_date     */
+/*,c.term_nom_date    */
+/*,c.active_flag */
+/*,c.time_zone_sk     */
+/*,c.seniority*/
+/**/
+/*,f.code as site*/
+/*,f.descr as site_desc*/
+/**/
+/*From */
+/*         (Select det_seg_sk,   seg_code_sk,    emp_sk,    nom_date,*/
+/*         From_unixtime(unix_timestamp(start_moment,'mm'),'HH:mm:ss') as Start_time*/
+/*         ,From_unixtime(unix_timestamp(stop_moment,'mm'),'HH:mm:ss') AS Stop_time*/
+/*   ,CASt(date_add(Add_months(From_unixtime(unix_timestamp(start_moment,'mm'),'yyyy-MM-dd HH:mm:ss'),-70*12),-1) as date) as downtime_date*/
+/*         ,start_moment*/
+/*         ,stop_moment*/
+/*              ,stop_moment-start_moment as Duration */
+/*                   ,Memo*/
+/**/
+/*              From Prod_history_capture_open.ewfm_BGB_det_seg */
+/*              Where CASt(date_add(Add_months(From_unixtime(unix_timestamp(start_moment,'mm'),'yyyy-MM-dd HH:mm:ss'),-70*12),-1) as date)>='2018-07-01'*/
+/*                   AND CASt(date_add(Add_months(From_unixtime(unix_timestamp(start_moment,'mm'),'yyyy-MM-dd HH:mm:ss'),-70*12),-1) as date)<='2018-09-30'*/
+/*                         and emp_sk <> "" */
+/*                         and det_seg_sk <> ""*/
+/*                         and seg_code_sk <> ""*/
+/*         )a*/
+/**/
+/*   inner join */
+/**/
+/*              ( Select * from Prod_history_capture_open.ewfm_BGB_seg_code */
+/*                   Where code in ('OFFLINE ACTIVITY SYSTEM FAULT','ONLINE ACTIVITY SYSTEM FAULT','WNS DOWNTIME')*/
+/*              )B*/
+/*              On a.seg_code_sk = B.seg_code_sk*/
+/**/
+/*   left join */
+/*         (Select emp_sk,short_name, sort_name, id,  last_name, first_name,     eff_hire_nom_date,    term_nom_date*/
+/*                                   ,active_flag   */
+/*                         ,time_zone_sk   */
+/*                         ,seniority */
+/*                         from */
+/*              Prod_history_capture_open.ewfm_BGB_emp*/
+/*              Where emp_sk <> "" */
+/*         )C */
+/*                   On a.emp_sk = C.emp_sk*/
+/*   Left join Prod_history_capture_open.ewfm_BGB_emp_grp_ass G*/
+/*   On a.emp_sk=G.emp_sk*/
+/**/
+/*   left join */
+/*   Prod_history_capture_open.ewfm_BGB_emp_grp_node F On */
+/*G.emp_grp_node_sk = F.emp_grp_node_sk*/
+/*And f.emp_grp_class_sk ="-989968298055"*/
+/**/
+/*) BY hadoop;*/
+/*%runquit;*/
+
+
+/*Removed Leicester Spinneyside as this should be BGB not BGR site*/
+
+/*PROC SQL ;*/
+/*CONNECT TO hadoop(%hdpconnect(analytics_rca));*/
+/**/
+/*Execute (Drop table if exists analytics_temp_user.Dt_Segments_All_AJ_1*/
+/*)By hadoop;*/
+/*Execute(*/
+/*Create table analytics_temp_user.Dt_Segments_All_AJ_1 as */
+/*Select * */
+/*from (*/
+/*select E.*  */
+/* ,Row_number () over(partition by det_seg_sk order by site desc) as temp */
+/**/
+/*from (Select * , "BGR" as downtime_dept from analytics_temp_user.Dt_Segments_BGR where site <> "Leicester Spinneyside" union all*/
+/*         */
+/*         Select *, "BGS" as downtime_dept from analytics_temp_user.Dt_Segments_BGS*/
+/*         ) E*/
+/*)D where D.temp =1*/
+/**/
+/*)By hadoop;*/
+/*%runquit;*/
+
+
+PROC SQL ;
+CONNECT TO hadoop(%hdpconnect(analytics_rca));
+
+Execute (Drop table if exists analytics_temp_user.Dt_Segments_All_AJ_1
+)By hadoop;
+Execute(
+Create table analytics_temp_user.Dt_Segments_All_AJ_1 
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+     AS   
+Select * 
+from (
+select E.*  
+ ,Row_number () over(partition by det_seg_sk order by site desc) as temp 
+
+from (Select * , "BGR" as downtime_dept from analytics_temp_user.Dt_Segments_BG 
+           ) E
+)D where D.temp =1
+
+)By hadoop;
+Quit;
+
+
+
+
+
+/*change above  code later*/
+
+PROC SQL ;
+CONNECT TO hadoop(%hdpconnect(analytics_rca));
+
+Execute (
+Drop table if exists analytics_temp_user.Dt_Segments_ALL_AJ
+)By hadoop ;
+Execute (
+
+Create table analytics_temp_user.Dt_Segments_ALL_AJ 
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+     AS   
+
+Select 
+           id   ,
+sort_name  ,
+site,
+downtime_date   ,
+start_time ,
+stop_time  ,
+duration   ,
+downtime_dept,
+b.total_downtime_day  
+     ,
+case when upper(memo) like '%INC%' and length(memo)- length(translate(memo,'1234567890',"")) >=7 
+                                then "Valid" 
+                                           else "Invalid" end as valid_inc_ind ,
+Case when Substr(upper(translate(memo,":- ","")),locate("INC",upper(translate(memo,":- ",""))),3) ="INC" and 
+upper(memo) like '%INC%' and length(memo)- length(translate(memo,'1234567890',"")) >=8  Then 
+Substr(upper(translate(memo,":- ","")),locate("INC",upper(translate(memo,":-  ",""))),11)
+Else "" end as incident_number,
+Upper(translate( REGEXP_REPLACE(a.memo, '\\d{2}\/\\d{2}/\\d{4}\ \\d{2}\:\\d{2}\:\\d{2}|\\d{2}\/\\d{2}\/\\d{4}|\\d{2}\\.\\d{2}\\.\\d{4}|\\d{2}\\:\\d{2}|\\d{2}\\.\\d{2}|\\d{1}\\.\\d{2}|\\d{1}\\:\\d{2}',""),":- < > ","")) as modified_memo
+
+
+,case when b.total_downtime_day >=240 then "more than 4 hours" else "less than 4 hours" end as long_durations
+                
+,memo 
+,code 
+                                from analytics_temp_user.Dt_Segments_ALL_AJ_1 a 
+                                     left join 
+                                     (Select emp_sk,nom_date , Sum(duration) as total_downtime_day  
+                                                     from analytics_temp_user.Dt_Segments_All_AJ_1
+                                                group  by emp_sk,nom_date
+                                                ) B 
+                                        On a.emp_sk =b.emp_sk
+                                          and a.nom_date =b.nom_date
+              
+     
+
+)By hadoop;
+
+%runquit;
+/*adding payroll number to lan id of downtime segments */
+
+
+/*Incident table name may be wrong but it using right date for incidents*/
+
+
+PROC SQL ;
+CONNECT TO hadoop(%hdpconnect(analytics_rca));
+
+Execute (
+Drop table if exists analytics_temp_user.Dt_Segments_ALL_payroll
+)By hadoop ;
+Execute (
+
+
+Create table analytics_temp_user.Dt_Segments_ALL_payroll 
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+     AS   
+Select a.* ,Case when length(a.incident_number)- length(translate(a.incident_number,'1234567890',"")) >=8 then "Successfully extracted INC"
+                    else "not able to extract" end as Valid_inc_extracted
+
+                ,b.employee_number as payroll_number 
+                ,b.t_office_name
+                ,b.t_business_area
+                ,b.t_department
+                ,b.t_role
+                ,b.email
+                ,b.manager_employee_num
+                ,b.manager_name
+                ,b.manager_email
+                ,b.snr_manager_name
+                ,b.snr_manager_email
+
+                ,c.category  
+                ,c.contact_type
+                ,c.correlation_id
+                ,c.priority
+                ,c.opened_at 
+                ,c.work_end
+                ,c.u_business_area
+                ,c.u_cause
+                ,c.u_sub_cause
+                ,c.description
+                ,c.short_description
+                ,c.u_incident_resolution_code 
+                ,c.u_incident_resolution_sub_code
+                ,c.close_code
+                ,c.close_notes
+                ,c.closed_at
+                ,c.service
+           
+                ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.category else Null end as d_category
+                     ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.contact_type else Null end as d_contact_type
+                     ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.correlation_id else Null end as d_correlation_id
+                ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.priority else Null end as d_priority
+                ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.opened_at else Null end as d_opened_at
+           ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.work_end else Null end as d_work_end
+                ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.u_business_area else Null end as d_business_area
+                ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.u_cause else Null end as d_u_cause
+           ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.u_sub_cause else Null end as d_u_sub_cause
+           ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.description else Null end as d_description
+           ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.short_description else Null end as d_short_description
+           ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.u_incident_resolution_code else Null end as d_u_incident_resolution_code
+           ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.u_incident_resolution_sub_code else Null end as d_u_incident_resolution_sub_code
+                ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.close_code else Null end as d_close_code
+           ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.close_notes else Null end as d_close_notes
+           ,Case when 
+     abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.closed_at else Null end as d_closed_at
+
+           ,Case when 
+                abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss")) <=3600 then  d.Service else Null end as d_service
+           
+                
+                ,abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") 
+                     - unix_timestamp(a.start_time,"HH:mm:ss")) as diff_in_sec
+                                           
+                ,row_number() over (partition by id , downtime_date , start_time  order
+                           by abs(unix_timestamp(Substr(d.opened_at,12,8),"HH:mm:ss") - unix_timestamp(a.start_time,"HH:mm:ss"))
+                                           )
+                                                as temp
+
+from 
+                                analytics_temp_user.Dt_Segments_ALL_AJ a 
+                                                left join 
+                                analytics_rca.Dt_all_employee b 
+                                 On Upper(trim(a.id)) = Upper(trim(b.staff_id))
+
+                Left join analytics_temp_user.Dt_incidents_last2month   c 
+                            on  trim(a.incident_number) =trim(c.correlation_id)
+
+                Left join analytics_temp_user.Dt_incidents_last2month   d
+                                on  trim(b.employee_number) =trim(d.requested_for_payroll)
+                                                and a.downtime_date = Substr(d.opened_at,1,10)
+                                                
+                                                                     
+) by hadoop ;
+%runquit;
+
+/*Incident table name may be wrong but it using right date for incidents*/
+  
+
+
+
+PROC SQL ;
+CONNECT TO hadoop(%hdpconnect(analytics_rca));
+
+Execute (
+Drop table if exists analytics_temp_user.Dt_Segments_ALL_payroll_2
+)By hadoop ;
+Execute (
+
+Create table analytics_temp_user.Dt_Segments_ALL_payroll_2 
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+     AS   
+
+Select a.*      
+                     ,Coalesce(correlation_id,d_correlation_id) as correlation_id_final 
+                     ,Coalesce(category,d_category) as category_final 
+,                    Coalesce(Contact_type,d_Contact_type) as Contact_type_final 
+           
+                ,Coalesce(priority,d_priority) as priority_final
+                     ,Coalesce(opened_at,d_opened_at) as opened_at_final
+                ,Coalesce(work_end,d_work_end) as work_end_final
+                ,coalesce(u_business_area, d_business_area) as business_area_final
+                ,coalesce(u_cause,d_u_cause) as u_cause_final
+                     ,coalesce(u_sub_cause,d_u_sub_cause) as u_sub_cause_final
+                ,coalesce(description,d_description) as description_final
+                ,coalesce(short_description,d_short_description) as short_description_final
+                ,coalesce(u_incident_resolution_code,d_u_incident_resolution_code) as u_incident_resolution_code_final
+                ,coalesce(u_incident_resolution_sub_code,d_u_incident_resolution_sub_code) as u_incident_resolution_sub_code_final
+                ,coalesce(close_code,d_close_code) as close_code_final
+                ,coalesce(close_notes,d_close_notes) as close_notes_final
+                ,coalesce(closed_at,d_closed_at) as closed_at_final
+                ,coalesce(Service,d_service) as service_final
+from 
+analytics_temp_user.Dt_Segments_ALL_payroll a
+Where temp =1 
+) by hadoop ;
+%runquit;
+
+
+     PROC SQL ;
+     CONNECT TO hadoop(%hdpconnect(analytics_rca));
+
+     Execute (
+     Drop table analytics_temp_user.Dt_Segments_ALL_AJ_3 
+      )by hadoop;
+
+     Execute (
+
+     create table analytics_temp_user.Dt_Segments_ALL_AJ_3  
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+     AS   
+
+     Select a.*,B.No_of_agents_with_incidents
+                     
+
+                From analytics_temp_user.Dt_Segments_ALL_payroll_2 a 
+                           left join  
+                           (Select correlation_id_final
+                           ,priority_final, count(distinct id) as No_of_agents_with_incidents
+                     from analytics_temp_user.Dt_Segments_ALL_payroll_2 
+                                group by correlation_id_final ,priority_final) B
+                                On a.correlation_id_final = b.correlation_id_final 
+     )By hadoop ;
+
+     %runquit;
+
+
+     PROC SQL ;
+     CONNECT TO hadoop(%hdpconnect(analytics_rca));
+
+     Execute (
+     Drop table analytics_temp_user.Dt_Segments_ALL_AJ_4
+     )by hadoop;
+
+     Execute (
+     create table analytics_temp_user.Dt_Segments_ALL_AJ_4  
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+     AS   
+
+Select a.*,
+
+Case when correlation_id_final is null and valid_inc_ind="Valid" then "Potentially behavioural"
+     When correlation_id_final is null and valid_inc_ind="Valid" then "Potentially behavioural or other template"
+     When priority_final in (3,4,5) and no_of_agents_with_incidents >1 then "Multiple user P3-P5"
+     when valid_inc_ind="Valid" then "genuine and valid memo"
+     when valid_inc_ind="Invalid"  then "Genuine and invalid memo"
+     else "error"
+     end 
+     as EWFM_snow_ind
+     ,Case when business_area_final in ("Energy","Services")  then "Customer Correction form"
+                When Contact_type_final = "self-service" then "Self serve"
+                When category_final = "Incident" then "Incident"
+                When correlation_id_final is null  then ""
+                     Else "Others"
+                     End as 
+                           Type_of_incident
+                           
+
+
+     from analytics_temp_user.Dt_Segments_ALL_AJ_3 a
+
+           ) by hadoop;
+           %runquit;
+
+
+
+           PROC SQL ;
+     CONNECT TO hadoop(%hdpconnect(analytics_rca));
+
+     Execute (
+     Drop table analytics_temp_user.Dt_Segments_ALL_AJ_6
+     )by hadoop;
+
+     Execute (
+     create table analytics_temp_user.Dt_Segments_ALL_AJ_6 
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+     AS  
+           Select a.*
+
+,case when length(modified_memo) - length(translate(modified_memo,"1234567890","")) >= 7  then "Valid"
+           else "Invalid" end as Valid_memo
+
+
+           from analytics_temp_user.Dt_Segments_ALL_AJ_4 a
+) by hadoop;
+           %runquit;
+
+
+           PROC SQL ;
+     CONNECT TO hadoop(%hdpconnect(analytics_rca));
+
+     Execute (
+     Drop table analytics_temp_user.Dt_Segments_ALL_AJ_7
+     )by hadoop;
+
+     Execute (
+     create table analytics_temp_user.Dt_Segments_ALL_AJ_7 
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+     AS  
+                Select 
+
+a.*,Case when correlation_id_final is null and Valid_memo="Invalid" then "Operational investigation"
+     When correlation_id_final is null and Valid_memo="Valid" then "Other"
+     When type_of_incident= "Customer Correction form" then "CCF raised"
+           else  "DTS investigation"
+     end 
+     as Downtime_action
+
+                From analytics_temp_user.Dt_Segments_ALL_AJ_6 a 
+)by hadoop;
+                %runquit;
+
+Proc sql;
+Select count(*) into : rows_cnt_1
+from hdp_tmpu.Dt_Segments_ALL_AJ_7 ;
+%runquit;
+
+     
+
+%macro no_row_quit;
+  
+
+   %if &rows_cnt_1 < 100 %then %do;
+           
+                       
+FILENAME output99 EMAIL
+     SUBJECT="No row in eWFM  data ;"
+     from="Deepak.tyagi@britishgas.co.uk" 
+     TO= ("Deepak.tyagi@britishgas.co.uk" "ben.loder@britishgas.co.uk" "Steve.crombleholme@britishgas.co.uk" "Rahul.dhawan@britishgas.co.uk" )    /* Required for HTML output */
+;
+
+DATA _NULL_;
+    
+    FILE output99;
+           PUT "Hi All";
+     put;
+
+      PUT "Empty eWFM tables";
+     put;
+     put "Data not exported in EWFM sheet , will have previous version only";
+     put "This might be due to empty  Prod_history_capture_open.ewfm_BG_det_seg ";
+     put;
+     put "Thanks";
+     put "Deepak";
+RUN;
+
+
+
+                           %abort cancel;
+                      %end;
+       %else %do ;
+                            
+FILENAME output99 EMAIL
+     SUBJECT="Data present in eWFM  data ;"
+    from="Deepak.tyagi@britishgas.co.uk" 
+     TO= ("Deepak.tyagi@britishgas.co.uk")    /* Required for HTML output */
+;
+DATA _NULL_;
+    
+    FILE output99;
+       PUT "Hi All";
+     put;
+      PUT "eWFM tables have data";
+     put;
+     put "Data exported in EWFM sheet , will have new version ";
+     put;
+     put "Thanks";
+     put "Deepak";
+RUN;
+  %end;
+  
+%mend no_row_quit;
+
+%no_row_quit ;
+
+
+
+
+/*FIlter out BGB and Spinneyside from data  for next time */
+
+
+
+     PROC SQL ;
+     CONNECT TO hadoop(%hdpconnect(analytics_rca));
+
+     Execute (
+     Drop table analytics_temp_user.Dt_Segments_ALL_AJ_8
+     )by hadoop;
+
+     Execute (
+     create table analytics_temp_user.Dt_Segments_ALL_AJ_8  
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+     AS  
+     Select a.id
+,a.sort_name
+,a.email
+
+,a.t_office_name as site
+
+,a.downtime_date
+,a.start_time
+,a.stop_time
+,a.duration
+,a.duration/60 as Duration_in_hours
+
+,a.total_downtime_day
+,a.valid_inc_ind
+,a.modified_memo
+,a.Valid_memo
+,a.incident_number
+,a.long_durations
+,a.memo
+,a.code
+,a.valid_inc_extracted
+,a.payroll_number
+,a.manager_employee_num
+,a.manager_name
+,a.manager_email
+
+,a.t_role as department
+,a.correlation_id_final    as   correlation_id
+,a.category_final     as   category
+,a.contact_type_final as   contact_type
+,a.priority_final     as   priority
+,a.opened_at_final    as   opened_at
+,cast(to_date(a.work_end_final) as date)    as   work_end
+,a.business_area_final     as   business_area
+,a.u_cause_final as   u_cause
+,a.u_sub_cause_final  as   u_sub_cause
+,a.description_final  as   description
+,a.short_description_final as   short_description
+,a.u_incident_resolution_code_final   as   u_incident_resolution_code
+,a.u_incident_resolution_sub_code_final     as   u_incident_resolution_sub_code
+,a.close_code_final   as   close_code
+,a.close_notes_final  as   close_notes
+,CAst(to_date(a.closed_at_final) as date) as closed_at
+,a.service_final as   service
+,a.no_of_agents_with_incidents
+,a.ewfm_snow_ind
+,a.type_of_incident
+,a.Downtime_action
+               ,case when close_notes_final is null then ""
+                                When lower(close_notes_final) like '%downtime%' then "Downtime justification"
+                                When  lower(close_notes_final) like '%password%' then "Password reset" 
+                                When  lower(close_notes_final) like '%firewall%' then "Firewalls" 
+                                When  lower(close_notes_final) like '%certificat%' then "Certificates" 
+                                When  lower(close_notes_final) like '%user%respo%' then "No or waiting user response" 
+                                When  lower(close_notes_final) like '%reboot%' then "Rebooted system" 
+                                When  lower(close_notes_final) like '%terminat%' then "Session terminated" 
+                                When  lower(close_notes_final) like '%incident%' then "Incident raised"
+                                When  lower(close_notes_final) like '%sanity%' then "Sanity check"
+                                When  lower(close_notes_final) like '%resolved%' then "Resolved issue" 
+                                                           else "Others"
+                                                                     End as 
+                                                                          Close_notes_category 
+                     ,Case When lower(description_final) is null then ""
+                          when lower(description_final) like '%freez%' then 'Freezing'
+                           when lower(description_final) like '%respon%' then 'Not responding'
+                           when lower(description_final) like '%slow%' then 'Slowness'
+                           When lower(description_final) like '%blank%' then 'Blank screen'
+                           When lower(description_final) like '%crash%' then 'Crashing'
+                           When lower(description_final) like '%issue%' then 'System issue'
+                           When lower(description_final) like '%perform%' then 'Performance'
+                           else "Others"
+                                End as description_category
+
+                ,date_sub(downtime_date,pmod(datediff(downtime_date,'1900-01-01'),7))  as Week_commencing
+                ,snr_manager_name
+                ,snr_manager_email
+             ,case when t_office_name in ("Cape Town - Corner of Beach Road Maitland"
+,"Cape Town - Fusion House"
+,"Cape Town - Voortrekker Road"
+,"Cardiff"
+,"Edinburgh"
+,"Hattersley"
+,"India"
+,"Leeds - Canal St"
+,"Leeds - City Park"
+,"Manchester - Talbot Rd"
+,"Mumbai - WNS"
+,"Noida - EXL"
+,"Pune - WNS"
+,"Rotherham - Ventura House") then  "BGR"
+
+When t_office_name in ("Glasgow"
+,"Glasgow - City Park"
+,"Leicester - Aylestone Rd"
+,"Stockport - Newbridge Lane"
+,"Uddingston - Murdoch House"
+)  then  "BGS"
+else "others"  end as Downtime_dept
+                                     
+                                           
+                                     from  analytics_temp_user.Dt_Segments_ALL_AJ_7 a
+                                Where t_office_name in ("Cape Town - Corner of Beach Road Maitland"
+                                                                     ,"Cape Town - Fusion House"
+                                                                     ,"Cape Town - Voortrekker Road"
+                                                                     ,"Cardiff"
+                                                                     ,"Edinburgh"
+                                                                     ,"Hattersley"
+                                                                     ,"India"
+                                                                     ,"Leeds - Canal St"
+                                                                     ,"Leeds - City Park"
+                                                                     ,"Manchester - Talbot Rd"
+                                                                     ,"Mumbai - WNS"
+                                                                     ,"Noida - EXL"
+                                                                     ,"Pune - WNS"
+                                                                     ,"Rotherham - Ventura House"
+                                                                     ,"Glasgow"
+                                                                     ,"Glasgow - City Park"
+                                                                     ,"Leicester - Aylestone Rd"
+                                                                     ,"Stockport - Newbridge Lane"
+                                                                     ,"Uddingston - Murdoch House"
+                                                                     )
+
+
+                     )
+                     By hadoop ;
+                      %runquit;
+
+
+     PROC SQL ;
+     CONNECT TO hadoop(%hdpconnect(analytics_rca));
+Create table Overall_EWFM_incident_data  as 
+Select * from connection to hadoop
+( Select * from  analytics_temp_user.Dt_Segments_ALL_AJ_8
+           )
+                     ;
+                Quit;
+
+
+                data Overall_EWFM_incident_data;
+                Set Overall_EWFM_incident_data ;
+format Week_commencing1 ddmmyys10.;
+Format Weekday_name $15.;
+If weekday(Downtime_date) =1 then Weekday_name = "Sunday" ;
+else if  weekday(Downtime_date) =2 then Weekday_name = "Monday" ;
+else if  weekday(Downtime_date) =3 then Weekday_name = "Tuesday" ;
+else if  weekday(Downtime_date) =4 then Weekday_name = "Wednesday" ;
+else if  weekday(Downtime_date) =5 then Weekday_name = "Thursday" ;
+else if  weekday(Downtime_date) =6 then Weekday_name = "Friday" ;
+else if  weekday(Downtime_date) =7 then Weekday_name = "Saturday" ;
+else Weekday_name = "" ;
+
+           Downtime_hour = Substr(Start_time,1,2) ;
+
+           Week_commencing1 = mdy(substr(Week_commencing,6,2),substr(Week_commencing,9,2),substr(Week_commencing,1,4));
+           Drop Week_commencing;
+           Rename Week_commencing1 = Week_commencing;  
+
+
+
+If Downtime_dept="others" then delete ;
+
+
+
+
+           Where site <> "" ;
+
+                     
+           %runquit;
+
+           Proc sql;
+           Create table incident_number_used as 
+           Select correlation_id , count(distinct id)as num_of_users , count(*) as number_of_times_used
+from Overall_EWFM_incident_data 
+where correlation_id is not missing 
+
+group by 1;
+%runquit;
+/**/
+/*proc sort data=incident_number_used (Where=(num_of_users=1)) out=tt;*/
+/*by  descending number_of_times_used;*/
+/*Run;*/
+proc sql;
+
+Create table Overall_EWFM_incident_data_11 as 
+Select a.*,
+b.num_of_users , b.number_of_times_used
+
+from Overall_EWFM_incident_data a 
+           Left join incident_number_used b 
+           On a.correlation_id = b.correlation_id
+;
+%runquit;
+
+Proc sql;
+Create table Overall_EWFM_incident_data as 
+Select 
+
+id
+,sort_name
+,email
+,downtime_dept
+,site
+,downtime_date
+,start_time
+,stop_time
+,duration
+,duration_in_hours
+,total_downtime_day
+,valid_inc_ind
+,modified_memo
+,valid_memo
+,incident_number
+,long_durations
+,memo
+,code
+,valid_inc_extracted
+,payroll_number
+,manager_employee_num
+,manager_name
+,manager_email
+,department
+,correlation_id
+,category
+,contact_type
+,priority
+,opened_at
+,work_end
+,business_area
+,u_cause
+,u_sub_cause
+,description
+,short_description
+,u_incident_resolution_code
+,u_incident_resolution_sub_code
+,close_code
+,close_notes
+,service
+,num_of_users
+,ewfm_snow_ind
+,type_of_incident
+,downtime_action
+,close_notes_category
+,description_category
+,snr_manager_name
+,snr_manager_email
+,Week_commencing
+,Weekday_name
+,Downtime_hour
+,number_of_times_used
+, closed_at
+
+,case 
+when downtime_date > closed_at and closed_at is not missing  then "After close date"
+     when downtime_date > work_end and work_end is not missing then "After work end date"
+     when  priority in ("3","4","5") and num_of_users >1  then "P3 - P5 Multiple users"
+     when num_of_users =1 and number_of_times_used>1 then "Same user multiple downtimes" 
+     when  num_of_users =1 and number_of_times_used=1 then "One user one incident" 
+     when  priority in ("1","2") then "P1- P2 incident" 
+     when correlation_id is missing then "No incident" 
+           else "ERR"
+                     end as New_category_downtime
+
+from Overall_EWFM_incident_data_11 ;
+%runquit;
+
+proc freq data=Overall_EWFM_incident_data ;
+tables New_category_downtime;
+%runquit;
+
+
+
+     data Energy_EWFM_incident_data Services_EWFM_incident_data;
+     set Overall_EWFM_incident_data;
+     Drop  modified_memo downtime_dept duration_in_hours valid_inc_ind incident_number valid_inc_extracted ewfm_snow_ind close_notes_category ;
+
+
+
+     If downtime_dept = "BGR" then output Energy_EWFM_incident_data;
+     else if downtime_dept = "BGS" then output Services_EWFM_incident_data;
+     %runquit;
+
+
+/*Exporting data files to their respective folders*/
+options symbolgen ;
+data Overall_EWFM_incident_data_1;
+set Overall_EWFM_incident_data;
+if downtime_date >= "&date_minus_Excel"d ;
+%runquit;
+
+data Energy_EWFM_incident_data_1 Services_EWFM_incident_data_1;
+set Overall_EWFM_incident_data_1;
+Drop  modified_memo downtime_dept duration_in_hours valid_inc_ind incident_number valid_inc_extracted ewfm_snow_ind close_notes_category ;
+If downtime_dept = "BGR" then output Energy_EWFM_incident_data_1;
+else if downtime_dept = "BGS" then output Services_EWFM_incident_data_1;
+%runquit;
+
+Proc sql;
+Select count(*) into : rows_cnt
+from Overall_EWFM_incident_data_1 ;
+%runquit;
+
+     
+
+%macro no_row_quit;
+  
+
+   %if &rows_cnt < 100 %then %do;
+           
+                       
+FILENAME output99 EMAIL
+     SUBJECT="No row in eWFM  data ;"
+     from="Deepak.tyagi@britishgas.co.uk" 
+     TO= ("Deepak.tyagi@britishgas.co.uk" "ben.loder@britishgas.co.uk" "Steve.crombleholme@britishgas.co.uk" "Rahul.dhawan@centrica.com" )    /* Required for HTML output */
+;
+
+DATA _NULL_;
+    
+    FILE output99;
+           PUT "Hi All";
+     put;
+
+      PUT "Empty eWFM tables";
+     put;
+     put "Data not exported in EWFM sheet , will have previous version only";
+     put "This might be due to empty  Prod_history_capture_open.ewfm_BG_det_seg ";
+     put;
+     put "Thanks";
+     put "Deepak";
+RUN;
+
+
+
+                           %abort cancel;
+                      %end;
+       %else %do ;
+                            
+FILENAME output99 EMAIL
+     SUBJECT="Data present in eWFM  data ;"
+    from="Deepak.tyagi@britishgas.co.uk" 
+     TO= ("Deepak.tyagi@britishgas.co.uk" "ben.loder@britishgas.co.uk" "Steve.crombleholme@britishgas.co.uk" "Rahul.dhawan@centrica.com" )    /* Required for HTML output */
+;
+DATA _NULL_;
+    
+    FILE output99;
+       PUT "Hi All";
+     put;
+      PUT "eWFM tables have data";
+     put;
+     put "Data exported in EWFM sheet , will have new version ";
+     put;
+     put "Thanks";
+     put "Deepak";
+RUN;
+  %end;
+  
+%mend no_row_quit;
+
+%no_row_quit ;
+
+
+Proc Export data=Overall_EWFM_incident_data_1 DBMS=EXCELCS 
+outfile="\\W2K6082\Common\SHARED\CRT\Deepak tyagi\EWFM report SAS data\Overall\Overall_ewfm_report_data.xlsb" 
+Replace ;
+  SERVER="azsu-p-app-192";
+     serveruser="&ukusr";
+     serverpass="&ukpwd";
+     sheet="Overall_ewfm_report_data";
+%runquit;
+Proc Export data=Energy_EWFM_incident_data_1 DBMS=EXCELCS 
+outfile="\\W2K6082\Common\SHARED\CRT\Deepak tyagi\EWFM report SAS data\Energy\Energy_ewfm_report_data.xlsb"   
+Replace ;
+  SERVER="azsu-p-app-192";
+     serveruser="&ukusr";
+     serverpass="&ukpwd";
+     sheet="Energy_ewfm_report_data";
+%runquit;
+
+Proc Export data=Services_EWFM_incident_data_1 DBMS=EXCELCS 
+outfile="\\W2K6082\Common\SHARED\CRT\Deepak tyagi\EWFM report SAS data\Services\Services_ewfm_report_data.xlsb"    
+Replace ;
+  SERVER="azsu-p-app-192";
+     serveruser="&ukusr";
+     serverpass="&ukpwd";
+     sheet="Services_ewfm_report_data";
+%runquit;
+
+
+
+
+
+
+/******* For tracking of time of execution*/
+%let End_time=%sysfunc(datetime(),datetime16.);
+
+%let seconds = %sysevalf("&End_time."dt -"&exec_time."dt) ;
+
+
+FILENAME output99 EMAIL
+     SUBJECT="SUCCESS: Sch_rep- %sysfunc(getoption(sysin)) date:&exec_time.;"
+     from="abhiram.patankar@britishgas.co.uk" 
+     TO= ("abhiram.patankar@britishgas.co.uk", "chirag.satwani@britishgas.co.uk","Deepak.tyagi@britishgas.co.uk" )  
+;
+
+DATA _NULL_;
+     FILE output99;
+      PUT "Executed_at: &exec_time.";
+     put;
+     put "Completed: %sysfunc(datetime(),datetime16.)";
+     put;
+     put "Execution_time(in seconds): &seconds. ";
+RUN;
+
+
+
+
+
+     PROC SQL;
+           CONNECT TO hadoop(%hdpconnect(analytics_temp_user));
+           Execute (  
+                     Drop table if exists analytics_temp_user.Dt_incidents_dash
+
+             ) By Hadoop ;
+           Execute (
+     create table analytics_temp_user.Dt_incidents_dash
+
+     STORED AS ORC tblproperties ('orc.compress'='SNAPPY','orc.compress.size'='16384') 
+
+
+     AS Select       close_code,
+from_unixtime(unix_timestamp(opened_at,"yyyy-MM-dd HH:mm:ss"), "dd-MM-yyyy") as open_date,
+from_unixtime(unix_timestamp(closed_at,"yyyy-MM-dd HH:mm:ss"), "dd-MM-yyyy") as close_date,
+from_unixtime(unix_timestamp(work_end,"yyyy-MM-dd HH:mm:ss"), "dd-MM-yyyy") as work_end_date,
+CAse when contact_type ="monitoring" then "monitoring"
+           when u_business_area in ("Energy","Services") then "CCF"
+           Else  "Helpdesk incident"
+           End as incident_category,
+u_status_and_group,
+short_description,
+closed_at,
+opened_at,
+work_end,
+u_category,
+u_source_type,
+contact_type,
+correlation_id,
+u_customer_reference,
+u_customer_impact,
+u_incident_resolution_code,
+u_incident_resolution_sub_code,
+priority,
+reassignment_count,
+state,
+u_re_opened_count,
+u_service_impact,
+u_work_status,
+assigned_to,
+cmdb_ci,
+u_cause,
+u_sub_cause,
+u_classification,
+u_external_assigned_to,
+u_external_assignment_group,
+u_complaint_id,
+u_other,
+u_error_message,
+u_existing_complaint,
+u_impact_area,
+u_stage_of_complaint,
+u_system,
+u_journey_impacted,
+u_business_area,
+u_landlord_type,
+sys_id,
+u_external_reference,
+service,
+assignment_group,
+requested_by_name,
+requested_by_payroll,
+requested_by_email,
+requested_by_phone,
+requested_for_name,
+requested_for_payroll,
+requested_for_email,
+requested_for_phone,
+site,
+bg_site_category,
+
+CAse when contact_type="monitoring" then "monitoring"
+when u_business_area in ("Energy","Services") then "CCF" 
+else "Helpdesk incident" end as incident_type,
+
+Case when service in ("DATABASE AS A SERVICE ORACLE","SALESFORCE BGS","MI-DATA-SAS","SALESFORCE BGB","MARKET FLOW",
+"Salesforce (BGE)","METERFLOW","SMART INDUSTRY INTEGRATION HUB","ENTERPRISE MANAGED FILE TRANSFERS (EMFT)","BGR - BILLING MIS (SAP)",
+"ENTERPRISE BATCH SCHEDULING","BGR & BGS - CRM MIS (SAP)","HOUSING SYSTEM SERVICES (HSS)","ACCESS MANAGEMENT (AM - IAM)",
+"IDENTITY MANAGEMENT (IM - IAM)","IXOS","ORACLE GRID CONTROL","CRM-SIEBEL-DATA-ARCHIVE","VODAFONE GDSP WAN","QUICK ADDRESS",
+"BANK ACCOUNT VALIDATION","BGSM METERING APPLICATIONS","BEST NEXT ACTION - ONEBG","WORK MANAGEMENT INFORMATION SYSTEM (WMIS)",
+"ENTERPRISE MANAGEMENT SERVICE (EMS)","TRILLIANT PHASE 3 HEAD END","ARIBA PROCUREMENT MANAGEMENT","BRITISHGASONLINE",
+"EMAIL RESPONSE MANAGEMENT SERVICE (ERMS)","EXPERIAN","BGR - BILLING BUSINESS WAREHOUSE (SAP)","DYNO CRM","METERING DATABASE (MDB) / BSMART",
+"INTEGRATED-CORRESPONDENCE","SPECIAL READ VOUCHERS (SRV)") then 1 else 0 end as Cirrus_system_ind
+
+,Case when u_journey_impacted in ("Moving Home", "Customer Profile",     "Billing", "Metering",     "Payments",     
+                                        "Sales & Renewals",     "Appointments",     "Tariff",  "Correspondence",
+                                             "Acquisitions",     "Withdrawal") then u_journey_impacted 
+                                          Else "others" End 
+                                           as journey_impacted_cat,
+                                           
+Case when Service in ("AGENT WORKBENCH",    "DESKTOP", "ACTIVE DIRECTORY",   "BGB - CRM (SAP)",   "MY VIRTUAL WORKSPACE",    "LAPTOP",  "ENGINEER WORKBENCH", 
+                             "Active Directory DE",   "MOBILE TELEPHONY",     "FIELD LAPTOP") then Service else "others"
+                                      end as Service_cat 
+
+
+from analytics_temp_user.Dt_incidents_last2month
+     ) By hadoop ;
+Quit;
+
